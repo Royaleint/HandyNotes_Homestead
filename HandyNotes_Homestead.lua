@@ -52,8 +52,15 @@ end
 -- HandyNotes plugin handler
 -------------------------------------------------------------------------------
 
+-- HandyNotes renders world-map pins at 12px x scale (screen-anchored via
+-- SetScalingLimits); at scale 1.0 they are half Homestead's visual weight
+-- and hard to spot (Gate 2 finding, 2026-08-11). Minimap pins at 12px match
+-- Homestead's minimap size exactly, so only the world map gets a boost.
+local WORLD_PIN_SCALE = 2.0
+local MINIMAP_PIN_SCALE = 1.0
+
 do
-    local playerFaction
+    local playerFaction, pathScale
 
     local function iter(nodes, prestate)
         if not nodes then return nil end
@@ -63,15 +70,16 @@ do
             -- faction is pre-baked by the exporter: present only when the
             -- vendor is effectively Alliance/Horde; absent = show to all.
             if vendor and (not vendor.faction or vendor.faction == playerFaction) then
-                return coord, nil, iconpath, db.profile.icon_scale, db.profile.icon_alpha
+                return coord, nil, iconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
             end
             coord, npcID = next(nodes, coord)
         end
         return nil
     end
 
-    function HNH:GetNodes2(uiMapID, _minimap)
+    function HNH:GetNodes2(uiMapID, minimap)
         playerFaction = UnitFactionGroup("player")
+        pathScale = minimap and MINIMAP_PIN_SCALE or WORLD_PIN_SCALE
         return iter, ns.Nodes[uiMapID], nil
     end
 end

@@ -53,10 +53,11 @@ end
 -------------------------------------------------------------------------------
 
 -- HandyNotes renders world-map pins at 12px x scale (screen-anchored via
--- SetScalingLimits). Gate 2 tuning (2026-08-11/12): 12px hard to spot,
--- 24px too large, 9px too small; settled at 14px. Minimap pins at 12px
--- match Homestead's minimap size exactly and stay untouched.
-local WORLD_PIN_SCALE = 14 / 12
+-- SetScalingLimits). Gate 2 tuning (2026-08-11/12) walked 12px -> 24 -> 9
+-- -> 14; settled on 1.35 (~16px), the de-facto ecosystem standard for
+-- vendor nodes (zarillion handynotes-plugins core/nodes.lua Vendor class).
+-- Minimap pins at 12px match Homestead's minimap size and stay untouched.
+local WORLD_PIN_SCALE = 1.35
 local MINIMAP_PIN_SCALE = 1.0
 
 do

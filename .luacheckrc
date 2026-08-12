@@ -18,7 +18,7 @@ globals = {
 -- with the code, don't pre-seed it.
 read_globals = {
     -- Lua builtins
-    "next", "ipairs",
+    "next", "ipairs", "math",
 
     -- Libraries
     "LibStub",
@@ -26,7 +26,9 @@ read_globals = {
 
     -- WoW API
     "CreateFrame",
+    "Enum",
     "GameTooltip",
+    "Item",
     "UnitFactionGroup",
     "UIParent",
     "UiMapPoint",

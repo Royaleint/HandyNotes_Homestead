@@ -1,0 +1,21 @@
+{
+    "runtime.version": "Lua 5.1",
+    "workspace.ignoreDir": ["Libs"],
+    "diagnostics.globals": [
+        "HandyNotesHomesteadDB",
+        "LibStub",
+        "HandyNotes",
+        "CreateFrame",
+        "Enum",
+        "GameTooltip",
+        "Item",
+        "UnitFactionGroup",
+        "UIParent",
+        "UiMapPoint",
+        "C_AddOns",
+        "C_Item",
+        "C_Map",
+        "C_SuperTrack",
+        "C_Texture"
+    ]
+}

@@ -60,6 +60,57 @@ end
 local WORLD_PIN_SCALE = 1.35
 local MINIMAP_PIN_SCALE = 1.0
 
+-------------------------------------------------------------------------------
+-- Continent-level nodes
+--
+-- The generated data keys nodes by each vendor's own zone map, so continent
+-- maps have nothing to draw (Gate 2 finding, 2026-08-12). Project zone
+-- coords up to the continent once per continent, on first view, via
+-- HereBeDragons (a hard dependency of HandyNotes itself, so always present).
+-------------------------------------------------------------------------------
+
+local HBD
+local continentNodes = {}
+
+local function ZoneContinent(zoneMapID)
+    local info = C_Map.GetMapInfo(zoneMapID)
+    while info and info.mapType and info.mapType > Enum.UIMapType.Continent do
+        info = C_Map.GetMapInfo(info.parentMapID)
+    end
+    return (info and info.mapType == Enum.UIMapType.Continent) and info.mapID or nil
+end
+
+local function GetContinentNodes(continentMapID)
+    local nodes = continentNodes[continentMapID]
+    if nodes then return nodes end
+    nodes = {}
+    for zoneMapID, zoneNodes in next, ns.Nodes do
+        if ZoneContinent(zoneMapID) == continentMapID then
+            for zoneCoord, npcID in next, zoneNodes do
+                local x = math.floor(zoneCoord / 10000) / 10000
+                local y = (zoneCoord % 10000) / 10000
+                local cx, cy = HBD:TranslateZoneCoordinates(x, y, zoneMapID, continentMapID)
+                if cx and cy then
+                    local coord = math.floor(cx * 10000 + 0.5) * 10000 + math.floor(cy * 10000 + 0.5)
+                    -- Projection compresses zones; nudge packed collisions
+                    -- (+0.0001 y) rather than dropping a vendor.
+                    while nodes[coord] do coord = coord + 1 end
+                    nodes[coord] = npcID
+                end
+            end
+        end
+    end
+    continentNodes[continentMapID] = nodes
+    return nodes
+end
+
+-- Node lookup shared by tooltip and click handlers: zone nodes come from the
+-- generated data, continent nodes from the projected cache.
+local function NodeAt(uiMapID, coord)
+    local nodes = ns.Nodes[uiMapID] or continentNodes[uiMapID]
+    return nodes and nodes[coord] or nil
+end
+
 do
     local playerFaction, pathScale
 
@@ -81,22 +132,29 @@ do
     function HNH:GetNodes2(uiMapID, minimap)
         playerFaction = UnitFactionGroup("player")
         pathScale = minimap and MINIMAP_PIN_SCALE or WORLD_PIN_SCALE
-        return iter, ns.Nodes[uiMapID], nil
+        local nodes = ns.Nodes[uiMapID]
+        if not nodes and not minimap then
+            local info = C_Map.GetMapInfo(uiMapID)
+            if info and info.mapType == Enum.UIMapType.Continent then
+                nodes = GetContinentNodes(uiMapID)
+            end
+        end
+        return iter, nodes, nil
     end
 end
 
-function HNH:OnEnter(uiMapID, coord)
-    local nodes = ns.Nodes[uiMapID]
-    local npcID = nodes and nodes[coord]
-    local vendor = npcID and ns.Vendors[npcID]
-    if not vendor then return end
+-------------------------------------------------------------------------------
+-- Tooltip
+-------------------------------------------------------------------------------
 
+-- Identity token for the active hover: item-load callbacks compare against
+-- it so a callback for a pin the mouse already left does nothing.
+local currentHover
+
+-- Writes the full tooltip body for a vendor. Returns true when at least one
+-- item name was still uncached (rendered as "...").
+local function RenderTooltip(vendor)
     local tooltip = GameTooltip
-    if self:GetCenter() > UIParent:GetCenter() then
-        tooltip:SetOwner(self, "ANCHOR_LEFT")
-    else
-        tooltip:SetOwner(self, "ANCHOR_RIGHT")
-    end
     tooltip:SetText(vendor.name)
 
     local location = vendor.subzone or vendor.zone
@@ -107,13 +165,13 @@ function HNH:OnEnter(uiMapID, coord)
         tooltip:AddLine(location, 0.7, 0.7, 0.7)
     end
 
+    local pending = false
     if #vendor.items > 0 then
         tooltip:AddLine(" ")
         tooltip:AddLine("Wares:", 1, 0.82, 0)
         for _, itemID in ipairs(vendor.items) do
-            -- GetItemInfo is nil until the item cache warms; it queries the
-            -- server on miss, so a re-hover fills the blanks in.
             local itemName = C_Item.GetItemInfo(itemID)
+            if not itemName then pending = true end
             tooltip:AddLine(itemName or "...", 1, 1, 1)
         end
     else
@@ -122,9 +180,48 @@ function HNH:OnEnter(uiMapID, coord)
     end
 
     tooltip:Show()
+    return pending
+end
+
+function HNH:OnEnter(uiMapID, coord)
+    local npcID = NodeAt(uiMapID, coord)
+    local vendor = npcID and ns.Vendors[npcID]
+    if not vendor then return end
+
+    local tooltip = GameTooltip
+    if self:GetCenter() > UIParent:GetCenter() then
+        tooltip:SetOwner(self, "ANCHOR_LEFT")
+    else
+        tooltip:SetOwner(self, "ANCHOR_RIGHT")
+    end
+
+    local token = {}
+    currentHover = token
+
+    if RenderTooltip(vendor) then
+        -- Uncached names rendered as "...": re-render in place as each item
+        -- load completes, instead of waiting for a re-hover (Gate 2 finding,
+        -- 2026-08-12). ContinueOnItemLoad fires immediately for cached items,
+        -- so only the misses register callbacks.
+        local pin = self
+        for _, itemID in ipairs(vendor.items) do
+            -- DoesItemExistByID separates "uncached" from "removed from the
+            -- game": ContinueOnItemLoad THROWS on nonexistent itemIDs, and a
+            -- patch can remove a shipped itemID during the stale-data window
+            -- between releases. Nonexistent items keep the plain "..." line.
+            if not C_Item.GetItemInfo(itemID) and C_Item.DoesItemExistByID(itemID) then
+                Item:CreateFromItemID(itemID):ContinueOnItemLoad(function()
+                    if currentHover == token and GameTooltip:IsOwned(pin) then
+                        RenderTooltip(vendor)
+                    end
+                end)
+            end
+        end
+    end
 end
 
 function HNH:OnLeave()
+    currentHover = nil
     GameTooltip:Hide()
 end
 
@@ -204,6 +301,7 @@ frame:SetScript("OnEvent", function(self)
 
     db = LibStub("AceDB-3.0"):New("HandyNotesHomesteadDB", defaults, true)
     iconpath = ResolveIcon()
+    HBD = LibStub("HereBeDragons-2.0")
     LibStub("AceEvent-3.0"):Embed(HNH)
 
     HandyNotes:RegisterPluginDB("Homestead", HNH, options)

@@ -1,0 +1,18 @@
+package-as: HandyNotes_Homestead
+
+enable-nolib-creation: no
+
+externals:
+  Libs/LibStub: https://repos.wowace.com/wow/libstub/trunk
+  Libs/CallbackHandler-1.0: https://repos.wowace.com/wow/callbackhandler/trunk/CallbackHandler-1.0
+  Libs/AceDB-3.0: https://repos.wowace.com/wow/ace3/trunk/AceDB-3.0
+  Libs/AceEvent-3.0: https://repos.wowace.com/wow/ace3/trunk/AceEvent-3.0
+
+# CF-only upload metadata: sent as a CurseForge relation when a CF project id
+# is active (same pattern as Homestead's .pkgmeta — a page listing, not a
+# packaging instruction).
+required-dependencies:
+  - handynotes
+
+ignore:
+  - README.md

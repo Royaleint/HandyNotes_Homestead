@@ -1,0 +1,15 @@
+## Interface: 120100
+## Title: HandyNotes: Homestead
+## Notes: Housing decor vendor map pins with wares tooltips. Lightweight HandyNotes plugin powered by Homestead's verified vendor data.
+## Author: Nubs
+## Version: @project-version@
+## RequiredDeps: HandyNotes
+## SavedVariables: HandyNotesHomesteadDB
+## Category: Map & Minimap
+## X-Website: https://github.com/Royaleint/HandyNotes_Homestead
+## X-License: GPL-3.0
+
+embeds.xml
+
+Data.lua
+HandyNotes_Homestead.lua

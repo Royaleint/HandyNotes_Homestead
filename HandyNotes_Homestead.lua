@@ -53,10 +53,10 @@ end
 -------------------------------------------------------------------------------
 
 -- HandyNotes renders world-map pins at 12px x scale (screen-anchored via
--- SetScalingLimits); at scale 1.0 they are half Homestead's visual weight
--- and hard to spot (Gate 2 finding, 2026-08-11). Minimap pins at 12px match
--- Homestead's minimap size exactly, so only the world map gets a boost.
-local WORLD_PIN_SCALE = 2.0
+-- SetScalingLimits). Gate 2 tuning (2026-08-11/12): 1.0 (12px) read as hard
+-- to spot, 2.0 (24px) as too large; Rawb picked 9px = 0.75. Minimap pins at
+-- 12px match Homestead's minimap size exactly and stay untouched.
+local WORLD_PIN_SCALE = 0.75
 local MINIMAP_PIN_SCALE = 1.0
 
 do

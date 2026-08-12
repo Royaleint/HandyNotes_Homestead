@@ -1,2 +1,6 @@
 # Nothing generated locally yet; Libs/ are committed for dev-build testing
 # (packager replaces them from .pkgmeta externals at release).
+
+# Nested private dev repo (tracker, plans) — never packaged or pushed with
+# the public addon (same pattern as Homestead's Home_Dev).
+HNH_Dev/

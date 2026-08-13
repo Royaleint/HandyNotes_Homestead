@@ -14,5 +14,24 @@ externals:
 required-dependencies:
   - handynotes
 
+# RELEASE_NOTES.html is generated at CI time (extracted from CHANGELOG.md and
+# converted from markdown to HTML by the release workflow). CF's API claims to
+# accept changelogType: markdown but renders it as plain text; HTML is the only
+# format that renders correctly on both CurseForge and Wago.
+manual-changelog:
+  filename: RELEASE_NOTES.html
+  markup-type: html
+
+# Repo-meta files: keep out of the packaged addon. HNH_Dev is the nested
+# private tracker repo and is untracked in git, so CI checkouts never contain
+# it — listed anyway so a local packager run can't ship it either.
 ignore:
+  - .github
+  - .gitignore
+  - .luacheckrc
+  - .luarc.json
+  - .pkgmeta
+  - CHANGELOG.md
+  - RELEASE_NOTES.html
   - README.md
+  - HNH_Dev

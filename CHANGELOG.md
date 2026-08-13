@@ -12,7 +12,7 @@ version heading and the next VERSION heading (`## [Unreleased]` does not stop
 it, so always keep Unreleased ABOVE the released sections), and appending below
 ships an EMPTY changelog to CurseForge/Wago/GitHub on a green CI run.
 
-## [Unreleased]
+## [1.0.0] - 2026-08-12
 
-- Initial release: housing decor vendor map pins with wares tooltips,
-  powered by Homestead's verified vendor data.
+- Initial release: housing decor vendor map pins with vendor wares in
+  tooltips, powered by Homestead.

@@ -11,3 +11,6 @@ RELEASE_NOTES.html
 # Nested private dev repo (tracker, plans) — never packaged or pushed with
 # the public addon (same pattern as Homestead's Home_Dev).
 HNH_Dev/
+
+# Local review-gate marker, machine state, never committed.
+.claude/review-pass.json

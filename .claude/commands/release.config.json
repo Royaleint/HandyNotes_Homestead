@@ -1,0 +1,36 @@
+{
+  "project": "HandyNotes_Homestead",
+  "ticket_prefix": "HNH",
+  "release_branch": "main",
+  "clean_roots": [".", "HNH_Dev"],
+  "gate2": {
+    "mode": "automated",
+    "source": "completed",
+    "source_path": "HNH_Dev/HNH_Completed.md",
+    "field": "Completed",
+    "marker_pattern": "Gate 2 ((in-game )?PASS|.*passed)"
+  },
+  "version_categories": [
+    { "pattern": "Breaking", "category": "major" },
+    { "pattern": "^Feature", "category": "minor" },
+    { "pattern": "^Bug", "category": "patch" },
+    { "pattern": "^Performance", "category": "patch" },
+    { "pattern": "^Data", "category": "patch" },
+    { "pattern": "^Chore", "category": "patch" },
+    { "pattern": "^Refactor", "category": "patch" },
+    { "pattern": "^Maintenance", "category": "patch" },
+    { "pattern": "^Infrastructure", "category": "patch" },
+    { "pattern": "^Release", "category": "patch" },
+    { "pattern": "^Docs", "category": "patch" }
+  ],
+  "tag_type": "annotated",
+  "luacheck": "luacheck . --config .luacheckrc",
+  "version_bump_files": [],
+  "changelog": {
+    "public": "CHANGELOG.md",
+    "confidentiality_mode": "none",
+    "manual_changelog_generated": true
+  },
+  "publication_targets": ["CurseForge", "GitHub"],
+  "commit_trailer": "Co-Authored-By: Royaleint and Claude Code"
+}

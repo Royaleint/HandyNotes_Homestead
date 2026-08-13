@@ -32,6 +32,7 @@ ignore:
   - .luarc.json
   - .pkgmeta
   - CHANGELOG.md
+  - RELEASE_NOTES.md
   - RELEASE_NOTES.html
   - README.md
   - HNH_Dev

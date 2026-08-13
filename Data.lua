@@ -3,7 +3,7 @@
     GENERATED from Homestead vendor data: do not hand-edit.
     Regenerate (from the Homestead repo):
         node Home_Dev/scripts/generate-handynotes-export.mjs --write
-    Source: Homestead v2.8.0 (12.1) 2026-08-11
+    Source: Homestead main 1378daa (12.1) 2026-08-12
 ]]
 
 local _, ns = ...
@@ -919,7 +919,7 @@ ns.Vendors = {
     [144129] = {
         name = "Plugger Spazzring",
         zone = "Searing Gorge",
-        subzone = "Blackrock Depths — The Grim Guzzler",
+        subzone = "The Grim Guzzler, Blackrock Depths",
         items = { 245291, 246779 },
     },
     [145695] = {

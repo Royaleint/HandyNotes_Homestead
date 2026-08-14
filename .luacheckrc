@@ -18,7 +18,7 @@ globals = {
 -- with the code, don't pre-seed it.
 read_globals = {
     -- Lua builtins
-    "next", "ipairs", "math",
+    "next", "ipairs", "math", "table",
 
     -- Libraries
     "LibStub",
@@ -33,6 +33,7 @@ read_globals = {
     "UIParent",
     "UiMapPoint",
     "C_AddOns",
+    "C_CurrencyInfo",
     "C_Item",
     "C_Map",
     "C_SuperTrack",

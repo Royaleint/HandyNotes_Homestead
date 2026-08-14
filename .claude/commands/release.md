@@ -18,7 +18,10 @@ Project-specific notes, worth knowing before running this:
   (`Home_Dev/scripts/generate-handynotes-export.mjs --write --source-version
   "<id>"` run from the Homestead repo). If a release should carry fresh vendor
   data, regenerate AFTER the source commit lands in Homestead so the stamp
-  names a real commit — never hand-edit Data.lua.
+  names a real commit — never hand-edit Data.lua. After regenerating, run
+  `lua5.1 Home_Dev/scripts/verify-handynotes-export.lua` (native-Lua fidelity
+  check against the Homestead source, independent of the exporter's own
+  parsing) and confirm `RESULT: EXACT MATCH` before tagging.
 - **Pre-release history carries no HNH- ticket IDs** (commits up to the first
   release predate the convention). First-release runs use the guard's
   `--allow-sha` for those, each named explicitly — from HNH-002 onward,

@@ -53,7 +53,7 @@ end
 -------------------------------------------------------------------------------
 
 -- HandyNotes renders world-map pins at 12px x scale (screen-anchored via
--- SetScalingLimits). Gate 2 tuning (2026-08-11/12) walked 12px -> 24 -> 9
+-- SetScalingLimits). Pin-size tuning (2026-08-11/12) walked 12px -> 24 -> 9
 -- -> 14; settled on 1.35 (~16px), the de-facto ecosystem standard for
 -- vendor nodes (zarillion handynotes-plugins core/nodes.lua Vendor class).
 -- Minimap pins at 12px match Homestead's minimap size and stay untouched.
@@ -64,7 +64,7 @@ local MINIMAP_PIN_SCALE = 1.0
 -- Continent-level nodes
 --
 -- The generated data keys nodes by each vendor's own zone map, so continent
--- maps have nothing to draw (Gate 2 finding, 2026-08-12). Project zone
+-- maps have nothing to draw (in-game finding, 2026-08-12). Project zone
 -- coords up to the continent once per continent, on first view, via
 -- HereBeDragons (a hard dependency of HandyNotes itself, so always present).
 -------------------------------------------------------------------------------
@@ -151,6 +151,85 @@ end
 -- it so a callback for a pin the mouse already left does nothing.
 local currentHover
 
+-- Formats an item's cost for display: gold via GetCoinTextureString (coin
+-- icons built in), currencies via a live GetCurrencyInfo icon lookup with a
+-- name fallback. Mirrors Homestead's own VendorData:FormatCost, which
+-- resolves both live at render time rather than baking a name/icon into the
+-- export at build time. No API-existence guard: the .toc is retail-only and
+-- both calls exist on every flavor — unlike Homestead's version, which has
+-- a real hand-rolled fallback if the guard ever trips, this one would just
+-- go silent, so an unreachable guard here is worse than no guard.
+--
+-- Result is memoized on the item table itself: the underlying cost DATA
+-- never changes once loaded, but RenderTooltip below re-runs in full on
+-- every uncached-name load callback, and recomputing GetCurrencyInfo on
+-- every re-render would amplify an existing O(n^2) hover cost on a large
+-- vendor. `false` means "computed, no cost data"; nil means "not computed
+-- yet". Caching for the session means a degraded first-hover result
+-- (GetCurrencyInfo returning no name/icon yet) can't self-correct on a
+-- later hover the way an unmemoized call would — near-unreachable since
+-- currency info is client-side static data Blizzard itself calls
+-- unguarded, but the RESOLVED STRING, unlike the data, is in principle a
+-- one-shot snapshot.
+-- Grey (matches the location/"Wares unknown" convention below, 0.7,0.7,0.7).
+local OTHER_COST_TEXT = "|cFFB3B3B3(other cost)|r"
+
+local function FormatCost(item)
+    if item.costCache ~= nil then
+        if item.costCache == false then return nil end
+        return item.costCache
+    end
+
+    local parts = {}
+    -- Set by a degraded currency lookup below; combined with item.otherCost
+    -- after the loop rather than appended immediately, so the marker always
+    -- lands last regardless of which currency (if any) failed to resolve —
+    -- otherwise a first-currency failure with a later successful one would
+    -- render "(other cost) + 50 <icon>", marker before the amount.
+    local needsOtherCost = false
+
+    if item.price and item.price > 0 then
+        parts[#parts + 1] = C_CurrencyInfo.GetCoinTextureString(item.price)
+    end
+    if item.currencies then
+        for _, currency in ipairs(item.currencies) do
+            local info = C_CurrencyInfo.GetCurrencyInfo(currency.id)
+            if info and info.iconFileID then
+                parts[#parts + 1] = currency.amount .. " |T" .. info.iconFileID .. ":0:0|t"
+            elseif info and info.name then
+                parts[#parts + 1] = currency.amount .. " " .. info.name
+            else
+                -- Currency lookup returned neither icon nor name (rare,
+                -- degraded path). Never print the raw currency ID to a
+                -- player — fall back to the same honest "can't show this"
+                -- marker the out-of-scope-cost path uses.
+                needsOtherCost = true
+            end
+        end
+    end
+    -- LOAD-BEARING, not cosmetic: this is the only thing standing between a
+    -- price-carrying otherCost row (e.g. "800g" on an item that really costs
+    -- 800g + reagents) and the understated-price defect this feature was
+    -- built to avoid. The exporter guarantees every such row sets
+    -- item.otherCost — nothing else in this file re-derives or re-checks
+    -- that. If this branch is ever dropped, short-circuited, or refactored
+    -- away, the understated price comes back silently: tests and luacheck
+    -- both pass, because the export data is correct — only the tooltip lies.
+    if item.otherCost then
+        needsOtherCost = true
+    end
+    if needsOtherCost then
+        parts[#parts + 1] = OTHER_COST_TEXT
+    end
+
+    if #parts == 0 then
+        item.costCache = false
+        return nil
+    end
+    item.costCache = table.concat(parts, " + ")
+    return item.costCache
+end
+
 -- Writes the full tooltip body for a vendor. Returns true when at least one
 -- item name was still uncached (rendered as "...").
 local function RenderTooltip(vendor)
@@ -169,10 +248,15 @@ local function RenderTooltip(vendor)
     if #vendor.items > 0 then
         tooltip:AddLine(" ")
         tooltip:AddLine("Wares:", 1, 0.82, 0)
-        for _, itemID in ipairs(vendor.items) do
-            local itemName = C_Item.GetItemInfo(itemID)
+        for _, item in ipairs(vendor.items) do
+            local itemName = C_Item.GetItemInfo(item.id)
             if not itemName then pending = true end
-            tooltip:AddLine(itemName or "...", 1, 1, 1)
+            local cost = FormatCost(item)
+            if cost then
+                tooltip:AddDoubleLine(itemName or "...", cost, 1, 1, 1, 1, 1, 1)
+            else
+                tooltip:AddLine(itemName or "...", 1, 1, 1)
+            end
         end
     else
         tooltip:AddLine(" ")
@@ -200,17 +284,17 @@ function HNH:OnEnter(uiMapID, coord)
 
     if RenderTooltip(vendor) then
         -- Uncached names rendered as "...": re-render in place as each item
-        -- load completes, instead of waiting for a re-hover (Gate 2 finding,
+        -- load completes, instead of waiting for a re-hover (in-game finding,
         -- 2026-08-12). ContinueOnItemLoad fires immediately for cached items,
         -- so only the misses register callbacks.
         local pin = self
-        for _, itemID in ipairs(vendor.items) do
+        for _, item in ipairs(vendor.items) do
             -- DoesItemExistByID separates "uncached" from "removed from the
             -- game": ContinueOnItemLoad THROWS on nonexistent itemIDs, and a
             -- patch can remove a shipped itemID during the stale-data window
             -- between releases. Nonexistent items keep the plain "..." line.
-            if not C_Item.GetItemInfo(itemID) and C_Item.DoesItemExistByID(itemID) then
-                Item:CreateFromItemID(itemID):ContinueOnItemLoad(function()
+            if not C_Item.GetItemInfo(item.id) and C_Item.DoesItemExistByID(item.id) then
+                Item:CreateFromItemID(item.id):ContinueOnItemLoad(function()
                     if currentHover == token and GameTooltip:IsOwned(pin) then
                         RenderTooltip(vendor)
                     end

@@ -377,11 +377,12 @@ frame:RegisterEvent("PLAYER_LOGIN")
 frame:SetScript("OnEvent", function(self)
     self:UnregisterEvent("PLAYER_LOGIN")
 
-    -- Full no-op when Homestead is enabled. At PLAYER_LOGIN every enabled
-    -- addon has finished loading, so the check is reliable. Second return is
-    -- the fully-loaded flag (first is loaded-or-loading).
+    -- Full no-op when Homestead (or its dev build) is enabled. At PLAYER_LOGIN
+    -- every enabled addon has finished loading, so the check is reliable.
+    -- Second return is the fully-loaded flag (first is loaded-or-loading).
     local _, homesteadLoaded = C_AddOns.IsAddOnLoaded("Homestead")
-    if homesteadLoaded then return end
+    local _, devBuildLoaded = C_AddOns.IsAddOnLoaded("Homestead_DevBuild")
+    if homesteadLoaded or devBuildLoaded then return end
 
     db = LibStub("AceDB-3.0"):New("HandyNotesHomesteadDB", defaults, true)
     iconpath = ResolveIcon()

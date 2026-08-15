@@ -14,3 +14,6 @@ HNH_Dev/
 
 # Local review-gate marker, machine state, never committed.
 .claude/review-pass.json
+
+# Local agent instructions.
+/AGENTS.md

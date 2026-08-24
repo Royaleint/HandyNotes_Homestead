@@ -48,7 +48,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable)
             rectangleCalls = rectangleCalls + 1
             rectangleOrder[#rectangleOrder + 1] = zoneMapID
             if continentMapID ~= 900 or zoneMapID == 103 then return nil end
-            return 0.1, 0.2, 0.1, 0.2
+            return 0.1, 0.2, 0.99985, 0.99995
         end,
         CanSetUserWaypointOnMap = function() return true end,
         HasUserWaypoint = function() return false end,
@@ -120,7 +120,13 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable)
     _G.C_Texture = {
         GetAtlasInfo = function(atlas)
             if atlas == "FlightMaster" and summaryAtlasAvailable ~= false then
-                return { file = 12345 }
+                return {
+                    file = 12345,
+                    leftTexCoord = 0.1,
+                    rightTexCoord = 0.9,
+                    topTexCoord = 0.2,
+                    bottomTexCoord = 0.8,
+                }
             end
         end,
     }
@@ -222,12 +228,12 @@ local function run()
     checkSummaryRecords(summaries)
     local firstBuildCalls, firstBuildOrder = rectangleStats()
     check(firstBuildCalls == 3 and firstBuildOrder[1] == 101 and firstBuildOrder[2] == 102 and firstBuildOrder[3] == 103, "summary builder must sort zone IDs before collision nudging")
-    local first = checkSummaryAt(summaries, 15001500, 101, 2)
-    checkSummaryAt(summaries, 15001501, 102, 1)
+    local first = checkSummaryAt(summaries, 15009999, 101, 2)
+    checkSummaryAt(summaries, 15019999, 102, 1)
     check(first.icon ~= zoneVendor.icon, "summary must use a distinct icon")
-    check(first.icon == "Interface\\MINIMAP\\TRACKING\\FlightMaster", "summary atlas must resolve to the FlightMaster texture path")
+    check(type(first.icon) == "table" and first.icon.icon == 12345 and first.icon.tCoordLeft == 0.1 and first.icon.tCoordRight == 0.9 and first.icon.tCoordTop == 0.2 and first.icon.tCoordBottom == 0.8, "summary must use the resolved FlightMaster atlas payload")
     local fallbackRuntime = { loadRuntime({}, "Alliance", false) }
-    local fallbackSummary = checkSummaryAt(collect(fallbackRuntime[1], 900, false), 15001500, 101, 2)
+    local fallbackSummary = checkSummaryAt(collect(fallbackRuntime[1], 900, false), 15009999, 101, 2)
     check(fallbackSummary.icon == "Interface\\MINIMAP\\TRACKING\\Banker", "summary must fall back to the Banker texture when its atlas is unavailable")
     fallbackRuntime[8]()
     check(countNodes(collect(handler, 900, false)) == 2, "same-faction continent request must retain summaries")
@@ -239,12 +245,12 @@ local function run()
     checkSummaryRecords(hordeSummaries)
     local hordeBuildCalls, hordeBuildOrder = rectangleStats()
     check(hordeBuildCalls == firstBuildCalls * 2 and hordeBuildOrder[4] == 101 and hordeBuildOrder[5] == 102 and hordeBuildOrder[6] == 103, "new faction must build a separate sorted summary cache")
-    checkSummaryAt(hordeSummaries, 15001500, 101, 1)
-    checkSummaryAt(hordeSummaries, 15001501, 102, 2)
+    checkSummaryAt(hordeSummaries, 15009999, 101, 1)
+    checkSummaryAt(hordeSummaries, 15019999, 102, 2)
     setFaction("Alliance")
     local restoredAllianceSummaries = collect(handler, 900, false)
-    checkSummaryAt(restoredAllianceSummaries, 15001500, 101, 2)
-    checkSummaryAt(restoredAllianceSummaries, 15001501, 102, 1)
+    checkSummaryAt(restoredAllianceSummaries, 15009999, 101, 2)
+    checkSummaryAt(restoredAllianceSummaries, 15019999, 102, 1)
     local restoredAllianceBuildCalls = rectangleStats()
     check(restoredAllianceBuildCalls == hordeBuildCalls, "switching back must reuse the existing Alliance cache entry")
     setFaction(nil)
@@ -256,15 +262,16 @@ local function run()
     local repeatedNilFactionBuildCalls = rectangleStats()
     check(repeatedNilFactionBuildCalls == nilFactionBuildCalls, "repeated nil-faction request must reuse its normalized cache entry")
     local failures = data.ZoneSummaryProjectionFailures
-    local failureReason = failures and failures[900] and failures[900][103]
-    check(type(failureReason) == "string" and failureReason ~= "", "missing rectangle must retain a harness-visible projection failure reason")
-    check(not summaries[15001502], "missing rectangle must omit only its zone")
+    local continentFailures = failures and failures[900]
+    check(type(continentFailures and continentFailures.Alliance and continentFailures.Alliance[103]) == "string", "Alliance projection failure must remain cached")
+    check(type(continentFailures and continentFailures.Horde and continentFailures.Horde[103]) == "string", "Horde projection failure must remain cached")
+    check(type(continentFailures and continentFailures.Neutral and continentFailures.Neutral[103]) == "string", "nil-faction projection failure must remain cached")
 
-    handler.OnEnter(pin, 900, 15001500)
+    handler.OnEnter(pin, 900, 15009999)
     check(#tooltip.lines == 3 and tooltip.lines[1] == "Alpha" and tooltip.lines[2] == "2 vendors", "summary tooltip must contain only the zone and vendor count")
     check(type(tooltip.lines[3]) == "string" and string.find(string.lower(tooltip.lines[3]), "click"), "summary tooltip must include a click instruction")
     check(not string.find(table.concat(tooltip.lines, "\n"), "Alliance vendor") and not string.find(table.concat(tooltip.lines, "\n"), "Wares") and not string.find(table.concat(tooltip.lines, "\n"), "Cached item"), "summary tooltip must not render vendor wares or item lines")
-    handler:OnClick("LeftButton", false, 900, 15001500)
+    handler:OnClick("LeftButton", false, 900, 15009999)
     check(selectedMap() == 101, "summary click must navigate to its zone")
     check(waypoint.set == 0 and waypoint.clear == 0 and waypoint.superTrack == 0, "summary click must not set, clear, or super-track a waypoint")
 

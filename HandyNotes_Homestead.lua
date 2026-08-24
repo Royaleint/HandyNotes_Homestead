@@ -20,7 +20,6 @@ local VENDOR_ATLAS = "housing-decor-vendor_32"
 -- Stock POI texture so pins never silently vanish if a patch renames the atlas.
 local FALLBACK_ICON = "Interface\\MINIMAP\\TRACKING\\Banker"
 local SUMMARY_ATLAS = "FlightMaster"
-local SUMMARY_ICON = "Interface\\MINIMAP\\TRACKING\\FlightMaster"
 
 local defaults = {
     profile = {
@@ -56,7 +55,13 @@ local function ResolveSummaryIcon()
     if not file then
         return FALLBACK_ICON
     end
-    return SUMMARY_ICON
+    return {
+        icon = file,
+        tCoordLeft = info.leftTexCoord,
+        tCoordRight = info.rightTexCoord,
+        tCoordTop = info.topTexCoord,
+        tCoordBottom = info.bottomTexCoord,
+    }
 end
 
 -------------------------------------------------------------------------------
@@ -90,6 +95,29 @@ local function ZoneContinent(zoneMapID)
     return (info and info.mapType == Enum.UIMapType.Continent) and info.mapID or nil
 end
 
+local function PackSummaryCoordinate(x, y)
+    if x < 0 or x >= 1 or y < 0 or y >= 1 then return nil end
+    local packedX = math.floor(x * 10000 + 0.5)
+    local packedY = math.floor(y * 10000 + 0.5)
+    if packedX < 0 or packedX > 9999 or packedY < 0 or packedY > 9999 then return nil end
+    return packedX, packedY
+end
+
+local function NudgeSummaryCoordinate(nodes, x, y)
+    local packedX, packedY = PackSummaryCoordinate(x, y)
+    if not packedX then return nil end
+    while nodes[packedX * 10000 + packedY] do
+        if packedY < 9999 then
+            packedY = packedY + 1
+        elseif packedX < 9999 then
+            packedX = packedX + 1
+        else
+            return nil
+        end
+    end
+    return packedX * 10000 + packedY
+end
+
 local function GetContinentNodes(continentMapID, faction)
     local factionKey = faction or "Neutral"
     local continentCache = continentNodes[continentMapID]
@@ -103,8 +131,13 @@ local function GetContinentNodes(continentMapID, faction)
     nodes = {}
     continentCache[factionKey] = nodes
     ns.ZoneSummaryProjectionFailures = ns.ZoneSummaryProjectionFailures or {}
+    local continentFailures = ns.ZoneSummaryProjectionFailures[continentMapID]
+    if not continentFailures then
+        continentFailures = {}
+        ns.ZoneSummaryProjectionFailures[continentMapID] = continentFailures
+    end
     local failures = {}
-    ns.ZoneSummaryProjectionFailures[continentMapID] = failures
+    continentFailures[factionKey] = failures
 
     local zoneMapIDs = {}
     for zoneMapID in next, ns.Nodes do
@@ -137,13 +170,16 @@ local function GetContinentNodes(continentMapID, faction)
             else
                 local x = minX + (maxX - minX) * 0.5
                 local y = minY + (maxY - minY) * 0.5
-                local coord = math.floor(x * 10000 + 0.5) * 10000 + math.floor(y * 10000 + 0.5)
-                while nodes[coord] do coord = coord + 1 end
-                nodes[coord] = {
-                    kind = "zoneSummary",
-                    zoneMapID = zoneMapID,
-                    vendorCount = vendorCount,
-                }
+                local coord = NudgeSummaryCoordinate(nodes, x, y)
+                if not coord then
+                    failures[zoneMapID] = "Summary coordinate is outside map bounds"
+                else
+                    nodes[coord] = {
+                        kind = "zoneSummary",
+                        zoneMapID = zoneMapID,
+                        vendorCount = vendorCount,
+                    }
+                end
             end
         end
     end

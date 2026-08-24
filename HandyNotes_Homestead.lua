@@ -188,8 +188,15 @@ end
 
 -- Node lookup shared by tooltip and click handlers: zone nodes come from the
 -- generated data, continent nodes from the projected cache.
-local function NodeAt(uiMapID, coord)
-    local nodes = ns.Nodes[uiMapID] or continentNodes[uiMapID]
+local function NodeAt(uiMapID, coord, faction)
+    local info = C_Map.GetMapInfo(uiMapID)
+    if info and info.mapType == Enum.UIMapType.Continent then
+        local continentCache = continentNodes[uiMapID]
+        local factionKey = faction or "Neutral"
+        local nodes = continentCache and continentCache[factionKey]
+        return nodes and nodes[coord] or nil
+    end
+    local nodes = ns.Nodes[uiMapID]
     return nodes and nodes[coord] or nil
 end
 
@@ -354,9 +361,8 @@ local function RenderTooltip(vendor)
 end
 
 function HNH:OnEnter(uiMapID, coord)
-    local npcID = NodeAt(uiMapID, coord)
-    local vendor = npcID and ns.Vendors[npcID]
-    if not vendor then return end
+    local node = NodeAt(uiMapID, coord, UnitFactionGroup("player"))
+    if not node then return end
 
     local tooltip = GameTooltip
     if self:GetCenter() > UIParent:GetCenter() then
@@ -364,6 +370,19 @@ function HNH:OnEnter(uiMapID, coord)
     else
         tooltip:SetOwner(self, "ANCHOR_RIGHT")
     end
+
+    -- luacheck: ignore 113
+    if type(node) == "table" and node.kind == "zoneSummary" then
+        local zone = C_Map.GetMapInfo(node.zoneMapID)
+        tooltip:SetText(zone and zone.name or "Unknown zone")
+        tooltip:AddLine(node.vendorCount .. " vendors")
+        tooltip:AddLine("Click to view zone")
+        tooltip:Show()
+        return
+    end
+
+    local vendor = ns.Vendors[node]
+    if not vendor then return end
 
     local token = {}
     currentHover = token
@@ -399,6 +418,15 @@ end
 -- Fires on both mouse-down and mouse-up, hence the `down` filter.
 function HNH:OnClick(button, down, uiMapID, coord)
     if button ~= "LeftButton" or down then return end
+    local node = NodeAt(uiMapID, coord, UnitFactionGroup("player"))
+    -- luacheck: ignore 113
+    if type(node) == "table" and node.kind == "zoneSummary" then
+        -- luacheck: ignore 113
+        if WorldMapFrame and WorldMapFrame.SetMapID then
+            WorldMapFrame:SetMapID(node.zoneMapID)
+        end
+        return
+    end
     -- Same guard + construction as Homestead's Utils/waypoints.lua: some
     -- maps reject user waypoints.
     if C_Map.CanSetUserWaypointOnMap and not C_Map.CanSetUserWaypointOnMap(uiMapID) then

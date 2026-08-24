@@ -48,7 +48,7 @@ local function loadRuntime(addons, faction)
             rectangleCalls = rectangleCalls + 1
             rectangleOrder[#rectangleOrder + 1] = zoneMapID
             if continentMapID ~= 900 or zoneMapID == 103 then return nil end
-            return 0.1, 0.1, 0.2, 0.2
+            return 0.1, 0.2, 0.1, 0.2
         end,
         CanSetUserWaypointOnMap = function() return true end,
         HasUserWaypoint = function() return false end,

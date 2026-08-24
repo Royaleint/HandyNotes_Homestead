@@ -19,6 +19,7 @@ local iconpath
 local VENDOR_ATLAS = "housing-decor-vendor_32"
 -- Stock POI texture so pins never silently vanish if a patch renames the atlas.
 local FALLBACK_ICON = "Interface\\MINIMAP\\TRACKING\\Banker"
+local SUMMARY_ICON = "Interface\\MINIMAP\\TRACKING\\FlightMaster"
 
 local defaults = {
     profile = {
@@ -64,13 +65,12 @@ local MINIMAP_PIN_SCALE = 1.0
 -- Continent-level nodes
 --
 -- The generated data keys nodes by each vendor's own zone map, so continent
--- maps have nothing to draw (in-game finding, 2026-08-12). Project zone
--- coords up to the continent once per continent, on first view, via
--- HereBeDragons (a hard dependency of HandyNotes itself, so always present).
+-- maps have nothing to draw (in-game finding, 2026-08-12). Build one summary
+-- per zone at its rectangle center when the continent is first viewed.
 -------------------------------------------------------------------------------
 
-local HBD
 local continentNodes = {}
+local summaryIconpath = FALLBACK_ICON
 
 local function ZoneContinent(zoneMapID)
     local info = C_Map.GetMapInfo(zoneMapID)
@@ -80,27 +80,63 @@ local function ZoneContinent(zoneMapID)
     return (info and info.mapType == Enum.UIMapType.Continent) and info.mapID or nil
 end
 
-local function GetContinentNodes(continentMapID)
-    local nodes = continentNodes[continentMapID]
+local function GetContinentNodes(continentMapID, faction)
+    local factionKey = faction or "Neutral"
+    local continentCache = continentNodes[continentMapID]
+    if not continentCache then
+        continentCache = {}
+        continentNodes[continentMapID] = continentCache
+    end
+    local nodes = continentCache[factionKey]
     if nodes then return nodes end
+
     nodes = {}
-    for zoneMapID, zoneNodes in next, ns.Nodes do
-        if ZoneContinent(zoneMapID) == continentMapID then
-            for zoneCoord, npcID in next, zoneNodes do
-                local x = math.floor(zoneCoord / 10000) / 10000
-                local y = (zoneCoord % 10000) / 10000
-                local cx, cy = HBD:TranslateZoneCoordinates(x, y, zoneMapID, continentMapID)
-                if cx and cy then
-                    local coord = math.floor(cx * 10000 + 0.5) * 10000 + math.floor(cy * 10000 + 0.5)
-                    -- Projection compresses zones; nudge packed collisions
-                    -- (+0.0001 y) rather than dropping a vendor.
-                    while nodes[coord] do coord = coord + 1 end
-                    nodes[coord] = npcID
-                end
+    continentCache[factionKey] = nodes
+    ns.ZoneSummaryProjectionFailures = ns.ZoneSummaryProjectionFailures or {}
+    local failures = {}
+    ns.ZoneSummaryProjectionFailures[continentMapID] = failures
+
+    local zoneMapIDs = {}
+    for zoneMapID in next, ns.Nodes do
+        local info = C_Map.GetMapInfo(zoneMapID)
+        if info and info.mapType and info.mapType > Enum.UIMapType.Continent and ZoneContinent(zoneMapID) == continentMapID then
+            zoneMapIDs[#zoneMapIDs + 1] = zoneMapID
+        end
+    end
+    table.sort(zoneMapIDs)
+
+    for _, zoneMapID in ipairs(zoneMapIDs) do
+        local vendors = {}
+        for _, npcID in next, ns.Nodes[zoneMapID] do
+            local vendor = ns.Vendors[npcID]
+            if vendor and (not vendor.faction or vendor.faction == faction) then
+                vendors[npcID] = true
+            end
+        end
+        local vendorCount = 0
+        for _ in next, vendors do
+            vendorCount = vendorCount + 1
+        end
+
+        if vendorCount > 0 then
+            local minX, maxX, minY, maxY = C_Map.GetMapRectOnMap(zoneMapID, continentMapID)
+            if not minX or not maxX or not minY or not maxY then
+                failures[zoneMapID] = "Map rectangle unavailable"
+            elseif minX >= maxX or minY >= maxY then
+                failures[zoneMapID] = "Map rectangle is degenerate"
+            else
+                local x = minX + (maxX - minX) * 0.5
+                local y = minY + (maxY - minY) * 0.5
+                local coord = math.floor(x * 10000 + 0.5) * 10000 + math.floor(y * 10000 + 0.5)
+                while nodes[coord] do coord = coord + 1 end
+                nodes[coord] = {
+                    kind = "zoneSummary",
+                    zoneMapID = zoneMapID,
+                    vendorCount = vendorCount,
+                }
             end
         end
     end
-    continentNodes[continentMapID] = nodes
     return nodes
 end
 
@@ -116,15 +152,19 @@ do
 
     local function iter(nodes, prestate)
         if not nodes then return nil end
-        local coord, npcID = next(nodes, prestate)
+        local coord, node = next(nodes, prestate)
         while coord do
-            local vendor = ns.Vendors[npcID]
+            -- luacheck: ignore 113
+            if type(node) == "table" and node.kind == "zoneSummary" then
+                return coord, nil, summaryIconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
+            end
+            local vendor = ns.Vendors[node]
             -- faction is pre-baked by the exporter: present only when the
             -- vendor is effectively Alliance/Horde; absent = show to all.
             if vendor and (not vendor.faction or vendor.faction == playerFaction) then
                 return coord, nil, iconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
             end
-            coord, npcID = next(nodes, coord)
+            coord, node = next(nodes, coord)
         end
         return nil
     end
@@ -133,10 +173,10 @@ do
         playerFaction = UnitFactionGroup("player")
         pathScale = minimap and MINIMAP_PIN_SCALE or WORLD_PIN_SCALE
         local nodes = ns.Nodes[uiMapID]
-        if not nodes and not minimap then
+        if not minimap then
             local info = C_Map.GetMapInfo(uiMapID)
             if info and info.mapType == Enum.UIMapType.Continent then
-                nodes = GetContinentNodes(uiMapID)
+                nodes = GetContinentNodes(uiMapID, playerFaction)
             end
         end
         return iter, nodes, nil
@@ -386,7 +426,7 @@ frame:SetScript("OnEvent", function(self)
 
     db = LibStub("AceDB-3.0"):New("HandyNotesHomesteadDB", defaults, true)
     iconpath = ResolveIcon()
-    HBD = LibStub("HereBeDragons-2.0")
+    summaryIconpath = SUMMARY_ICON
     LibStub("AceEvent-3.0"):Embed(HNH)
 
     HandyNotes:RegisterPluginDB("Homestead", HNH, options)

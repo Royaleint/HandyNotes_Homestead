@@ -12,6 +12,9 @@ RELEASE_NOTES.html
 # the public addon (same pattern as Homestead's Home_Dev).
 HNH_Dev/
 
+# Local implementation worktrees; keep linked branches out of the public checkout.
+.worktrees/
+
 # Local review-gate marker, machine state, never committed.
 .claude/review-pass.json
 

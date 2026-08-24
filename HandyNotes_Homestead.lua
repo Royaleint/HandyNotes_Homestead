@@ -49,6 +49,15 @@ local function ResolveIcon()
     }
 end
 
+local function ResolveSummaryIcon()
+    local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(SUMMARY_ICON)
+    local file = info and (info.file or info.filename)
+    if not file then
+        return FALLBACK_ICON
+    end
+    return SUMMARY_ICON
+end
+
 -------------------------------------------------------------------------------
 -- HandyNotes plugin handler
 -------------------------------------------------------------------------------
@@ -426,7 +435,7 @@ frame:SetScript("OnEvent", function(self)
 
     db = LibStub("AceDB-3.0"):New("HandyNotesHomesteadDB", defaults, true)
     iconpath = ResolveIcon()
-    summaryIconpath = SUMMARY_ICON
+    summaryIconpath = ResolveSummaryIcon()
     LibStub("AceEvent-3.0"):Embed(HNH)
 
     HandyNotes:RegisterPluginDB("Homestead", HNH, options)

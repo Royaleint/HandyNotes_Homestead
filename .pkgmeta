@@ -36,3 +36,4 @@ ignore:
   - RELEASE_NOTES.html
   - README.md
   - HNH_Dev
+  - tests

@@ -19,6 +19,14 @@ assert(loadfile("Data.lua"))("HandyNotes_Homestead", realData)
 check(countNodes(realData.Nodes) > 0, "Data.lua smoke check found no zone nodes")
 check(countNodes(realData.Vendors) > 0, "Data.lua smoke check found no vendors")
 
+local activeRestores = {}
+
+local function restoreAll()
+    for index = #activeRestores, 1, -1 do
+        activeRestores[index]()
+    end
+end
+
 local function loadRuntime(addons, faction)
     local registered
     local frame
@@ -63,6 +71,26 @@ local function loadRuntime(addons, faction)
             [6] = { name = "Invalid continent vendor", items = {} },
         },
     }
+    local globalNames = {
+        "Enum", "next", "pairs", "C_Map", "C_Texture", "C_AddOns", "UnitFactionGroup", "CreateFrame",
+        "GameTooltip", "UIParent", "WorldMapFrame", "UiMapPoint", "C_SuperTrack", "C_CurrencyInfo",
+        "C_Item", "Item", "HandyNotes", "LibStub",
+    }
+    local originalGlobals = {}
+    for index = 1, #globalNames do
+        local name = globalNames[index]
+        originalGlobals[name] = _G[name]
+    end
+    local restored
+    local function restore()
+        if restored then return end
+        restored = true
+        for index = 1, #globalNames do
+            local name = globalNames[index]
+            _G[name] = originalGlobals[name]
+        end
+    end
+    activeRestores[#activeRestores + 1] = restore
     local nativeNext = next
     local nativePairs = pairs
     local forcedZoneOrder = { 102, 101, 103, 900 }
@@ -131,7 +159,7 @@ local function loadRuntime(addons, faction)
     assert(loadfile("HandyNotes_Homestead.lua"))("HandyNotes_Homestead", data)
     frame.scripts.OnEvent(frame)
     return registered, tooltip, waypoint, function() return mapSelection end, function(value) factionState.value = value end,
-        function() return rectangleCalls, rectangleOrder end, forcedZoneOrder
+        function() return rectangleCalls, rectangleOrder end, forcedZoneOrder, restore, data
 end
 
 local function collect(handler, mapID, minimap)
@@ -146,70 +174,102 @@ local function collect(handler, mapID, minimap)
 end
 
 local function checkSummaryRecords(nodes)
-    for _, node in pairs(nodes) do
+    for coord, node in pairs(nodes) do
         local record = node.record
-        check(type(record) == "table" and record.kind == "zoneSummary", "every continent record must be a typed zone summary")
-        check(type(record.zoneMapID) == "number" and type(record.vendorCount) == "number", "summary record must carry a zone ID and vendor count")
+        local kind = type(record) == "table" and record.kind or type(record)
+        check(kind == "zoneSummary", "summary at " .. coord .. " expected kind zoneSummary, got " .. tostring(kind))
+        check(type(record.zoneMapID) == "number" and type(record.vendorCount) == "number", "summary at " .. coord .. " expected numeric zoneMapID and vendorCount, got " .. tostring(record.zoneMapID) .. " and " .. tostring(record.vendorCount))
     end
 end
 
-local standalone = loadRuntime({}, "Alliance")
-check(standalone, "standalone registration did not capture a plugin handler")
-check(not loadRuntime({ Homestead = true }, "Alliance"), "Homestead-enabled path registered the plugin")
-check(not loadRuntime({ Homestead_DevBuild = true }, "Alliance"), "Homestead_DevBuild-enabled path registered the plugin")
-
-local handler, tooltip, waypoint, selectedMap, setFaction, rectangleStats, forcedZoneOrder = loadRuntime({}, "Alliance")
-check(forcedZoneOrder[1] == 102 and forcedZoneOrder[2] == 101, "collision fixture must enumerate zones out of sorted order")
-local zoneNodes = collect(handler, 101, false)
-check(type(zoneNodes[10001000].record) == "number", "zone vendor records must remain numeric")
-local pin = { GetCenter = function() return 0 end }
-handler.OnEnter(pin, 101, 10001000)
-check(tooltip.lines[1] == "Alliance vendor" and tooltip.lines[4] == "Wares:" and tooltip.lines[5] == "Cached item", "numeric vendor OnEnter must retain its wares tooltip path")
-
-local summaries = collect(handler, 900, false)
-check(countNodes(summaries) == 2, "continent must emit one summary for each rectangle-projectable eligible zone")
-checkSummaryRecords(summaries)
-local firstBuildCalls, firstBuildOrder = rectangleStats()
-check(firstBuildCalls == 3 and firstBuildOrder[1] == 101 and firstBuildOrder[2] == 102 and firstBuildOrder[3] == 103, "summary builder must sort zone IDs before collision nudging")
-local first = summaries[15001500]
-local second = summaries[15001501]
-check(first and first.record.kind == "zoneSummary", "continent record must be a typed zone summary")
-check(first.record.zoneMapID == 101 and first.record.vendorCount == 2, "summary must count unique Alliance-visible vendors")
-check(second and second.record.zoneMapID == 102 and second.record.vendorCount == 1, "sorted collisions must nudge the later zone deterministically")
-check(first.icon ~= zoneNodes[10001000].icon, "summary must use a distinct icon")
-check(countNodes(collect(handler, 900, false)) == 2, "same-faction continent request must retain summaries")
-local repeatedBuildCalls = rectangleStats()
-check(repeatedBuildCalls == firstBuildCalls, "same-faction continent request must reuse its cached summary build")
-
-setFaction("Horde")
-local hordeSummaries = collect(handler, 900, false)
-checkSummaryRecords(hordeSummaries)
-local hordeBuildCalls, hordeBuildOrder = rectangleStats()
-check(hordeBuildCalls == firstBuildCalls * 2 and hordeBuildOrder[4] == 101 and hordeBuildOrder[5] == 102 and hordeBuildOrder[6] == 103, "new faction must build a separate sorted summary cache")
-check(hordeSummaries[15001500].record.vendorCount == 1, "faction cache must not reuse Alliance summary counts")
-check(hordeSummaries[15001501].record.vendorCount == 2, "Horde summary must include Horde and neutral vendors")
-setFaction("Alliance")
-local restoredAllianceSummaries = collect(handler, 900, false)
-check(restoredAllianceSummaries[15001500].record.vendorCount == 2 and restoredAllianceSummaries[15001501].record.vendorCount == 1, "switching back must restore the cached Alliance summary counts")
-local restoredAllianceBuildCalls = rectangleStats()
-check(restoredAllianceBuildCalls == hordeBuildCalls, "switching back must reuse the existing Alliance cache entry")
-check(not summaries[15001502], "missing rectangle must omit only its zone")
-
-handler.OnEnter(pin, 900, 15001500)
-check(#tooltip.lines == 3 and tooltip.lines[1] == "Alpha" and tooltip.lines[2] == "2 vendors", "summary tooltip must contain only the zone and vendor count")
-check(type(tooltip.lines[3]) == "string" and string.find(string.lower(tooltip.lines[3]), "click"), "summary tooltip must include a click instruction")
-check(not string.find(table.concat(tooltip.lines, "\n"), "Alliance vendor") and not string.find(table.concat(tooltip.lines, "\n"), "Wares") and not string.find(table.concat(tooltip.lines, "\n"), "Cached item"), "summary tooltip must not render vendor wares or item lines")
-handler:OnClick("LeftButton", false, 900, 15001500)
-check(selectedMap() == 101, "summary click must navigate to its zone")
-check(waypoint.set == 0 and waypoint.clear == 0 and waypoint.superTrack == 0, "summary click must not set, clear, or super-track a waypoint")
-
-handler:OnClick("LeftButton", false, 101, 10001000)
-check(waypoint.set == 1 and waypoint.superTrack == 1, "vendor click must retain waypoint and super-tracking behavior")
-local minimapNodes = collect(handler, 900, true)
-check(type(minimapNodes[70007000].record) == "number", "minimap must retain fixture native numeric nodes")
-for _, node in pairs(minimapNodes) do
-    check(type(node.record) ~= "table" or node.record.kind ~= "zoneSummary", "minimap continent request must not synthesize zone summaries")
+local function checkSummaryAt(nodes, coord, zoneMapID, vendorCount)
+    local node = nodes[coord]
+    local record = node and node.record
+    check(node, "summary at " .. coord .. " expected zone " .. zoneMapID .. ", got nil")
+    check(type(record) == "table", "summary at " .. coord .. " expected table, got " .. type(record))
+    check(record.zoneMapID == zoneMapID and record.vendorCount == vendorCount, "summary at " .. coord .. " expected zone/count " .. zoneMapID .. "/" .. vendorCount .. ", got " .. tostring(record.zoneMapID) .. "/" .. tostring(record.vendorCount))
+    return node
 end
+
+local function run()
+    local standalone = { loadRuntime({}, "Alliance") }
+    check(standalone[1], "standalone registration did not capture a plugin handler")
+    standalone[8]()
+    local homestead = { loadRuntime({ Homestead = true }, "Alliance") }
+    check(not homestead[1], "Homestead-enabled path registered the plugin")
+    homestead[8]()
+    local devBuild = { loadRuntime({ Homestead_DevBuild = true }, "Alliance") }
+    check(not devBuild[1], "Homestead_DevBuild-enabled path registered the plugin")
+    devBuild[8]()
+
+    local handler, tooltip, waypoint, selectedMap, setFaction, rectangleStats, forcedZoneOrder, _, data = loadRuntime({}, "Alliance")
+    check(forcedZoneOrder[1] == 102 and forcedZoneOrder[2] == 101, "collision fixture must enumerate zones out of sorted order")
+    local zoneNodes = collect(handler, 101, false)
+    local zoneVendor = zoneNodes[10001000]
+    check(zoneVendor and type(zoneVendor.record) == "number", "zone vendor at 10001000 expected numeric record, got " .. tostring(zoneVendor and zoneVendor.record))
+    local pin = { GetCenter = function() return 0 end }
+    handler.OnEnter(pin, 101, 10001000)
+    check(tooltip.lines[1] == "Alliance vendor" and tooltip.lines[4] == "Wares:" and tooltip.lines[5] == "Cached item", "numeric vendor OnEnter must retain its wares tooltip path")
+
+    local summaries = collect(handler, 900, false)
+    check(countNodes(summaries) == 2, "continent must emit one summary for each rectangle-projectable eligible zone")
+    checkSummaryRecords(summaries)
+    local firstBuildCalls, firstBuildOrder = rectangleStats()
+    check(firstBuildCalls == 3 and firstBuildOrder[1] == 101 and firstBuildOrder[2] == 102 and firstBuildOrder[3] == 103, "summary builder must sort zone IDs before collision nudging")
+    local first = checkSummaryAt(summaries, 15001500, 101, 2)
+    checkSummaryAt(summaries, 15001501, 102, 1)
+    check(first.icon ~= zoneVendor.icon, "summary must use a distinct icon")
+    check(countNodes(collect(handler, 900, false)) == 2, "same-faction continent request must retain summaries")
+    local repeatedBuildCalls = rectangleStats()
+    check(repeatedBuildCalls == firstBuildCalls, "same-faction continent request must reuse its cached summary build")
+
+    setFaction("Horde")
+    local hordeSummaries = collect(handler, 900, false)
+    checkSummaryRecords(hordeSummaries)
+    local hordeBuildCalls, hordeBuildOrder = rectangleStats()
+    check(hordeBuildCalls == firstBuildCalls * 2 and hordeBuildOrder[4] == 101 and hordeBuildOrder[5] == 102 and hordeBuildOrder[6] == 103, "new faction must build a separate sorted summary cache")
+    checkSummaryAt(hordeSummaries, 15001500, 101, 1)
+    checkSummaryAt(hordeSummaries, 15001501, 102, 2)
+    setFaction("Alliance")
+    local restoredAllianceSummaries = collect(handler, 900, false)
+    checkSummaryAt(restoredAllianceSummaries, 15001500, 101, 2)
+    checkSummaryAt(restoredAllianceSummaries, 15001501, 102, 1)
+    local restoredAllianceBuildCalls = rectangleStats()
+    check(restoredAllianceBuildCalls == hordeBuildCalls, "switching back must reuse the existing Alliance cache entry")
+    setFaction(nil)
+    local nilFactionSummaries = collect(handler, 900, false)
+    checkSummaryRecords(nilFactionSummaries)
+    local nilFactionBuildCalls = rectangleStats()
+    check(nilFactionBuildCalls == hordeBuildCalls + firstBuildCalls, "nil faction must build a stable normalized cache entry")
+    check(countNodes(collect(handler, 900, false)) == countNodes(nilFactionSummaries), "repeated nil-faction request must retain summary counts")
+    local repeatedNilFactionBuildCalls = rectangleStats()
+    check(repeatedNilFactionBuildCalls == nilFactionBuildCalls, "repeated nil-faction request must reuse its normalized cache entry")
+    local failures = data.ZoneSummaryProjectionFailures
+    local failureReason = failures and failures[900] and failures[900][103]
+    check(type(failureReason) == "string" and failureReason ~= "", "missing rectangle must retain a harness-visible projection failure reason")
+    check(not summaries[15001502], "missing rectangle must omit only its zone")
+
+    handler.OnEnter(pin, 900, 15001500)
+    check(#tooltip.lines == 3 and tooltip.lines[1] == "Alpha" and tooltip.lines[2] == "2 vendors", "summary tooltip must contain only the zone and vendor count")
+    check(type(tooltip.lines[3]) == "string" and string.find(string.lower(tooltip.lines[3]), "click"), "summary tooltip must include a click instruction")
+    check(not string.find(table.concat(tooltip.lines, "\n"), "Alliance vendor") and not string.find(table.concat(tooltip.lines, "\n"), "Wares") and not string.find(table.concat(tooltip.lines, "\n"), "Cached item"), "summary tooltip must not render vendor wares or item lines")
+    handler:OnClick("LeftButton", false, 900, 15001500)
+    check(selectedMap() == 101, "summary click must navigate to its zone")
+    check(waypoint.set == 0 and waypoint.clear == 0 and waypoint.superTrack == 0, "summary click must not set, clear, or super-track a waypoint")
+
+    handler:OnClick("LeftButton", false, 101, 10001000)
+    check(waypoint.set == 1 and waypoint.superTrack == 1, "vendor click must retain waypoint and super-tracking behavior")
+    local minimapNodes = collect(handler, 900, true)
+    local minimapNative = minimapNodes[70007000]
+    check(minimapNative and type(minimapNative.record) == "number", "minimap native node at 70007000 expected numeric record, got " .. tostring(minimapNative and minimapNative.record))
+    for coord, node in pairs(minimapNodes) do
+        check(type(node.record) ~= "table" or node.record.kind ~= "zoneSummary", "minimap node at " .. coord .. " must not be a synthesized zoneSummary")
+    end
+end
+
+local ok, err = xpcall(run, debug.traceback)
+restoreAll()
+if not ok then error(err, 0) end
 
 print("HNH-004 zone summary harness: PASS")
 -- luacheck: pop

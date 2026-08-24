@@ -19,6 +19,7 @@ local iconpath
 local VENDOR_ATLAS = "housing-decor-vendor_32"
 -- Stock POI texture so pins never silently vanish if a patch renames the atlas.
 local FALLBACK_ICON = "Interface\\MINIMAP\\TRACKING\\Banker"
+local SUMMARY_ATLAS = "FlightMaster"
 
 local defaults = {
     profile = {
@@ -48,6 +49,21 @@ local function ResolveIcon()
     }
 end
 
+local function ResolveSummaryIcon()
+    local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(SUMMARY_ATLAS)
+    local file = info and (info.file or info.filename)
+    if not file then
+        return FALLBACK_ICON
+    end
+    return {
+        icon = file,
+        tCoordLeft = info.leftTexCoord,
+        tCoordRight = info.rightTexCoord,
+        tCoordTop = info.topTexCoord,
+        tCoordBottom = info.bottomTexCoord,
+    }
+end
+
 -------------------------------------------------------------------------------
 -- HandyNotes plugin handler
 -------------------------------------------------------------------------------
@@ -64,13 +80,12 @@ local MINIMAP_PIN_SCALE = 1.0
 -- Continent-level nodes
 --
 -- The generated data keys nodes by each vendor's own zone map, so continent
--- maps have nothing to draw (in-game finding, 2026-08-12). Project zone
--- coords up to the continent once per continent, on first view, via
--- HereBeDragons (a hard dependency of HandyNotes itself, so always present).
+-- maps have nothing to draw (in-game finding, 2026-08-12). Build one summary
+-- per zone at its rectangle center when the continent is first viewed.
 -------------------------------------------------------------------------------
 
-local HBD
 local continentNodes = {}
+local summaryIconpath = FALLBACK_ICON
 
 local function ZoneContinent(zoneMapID)
     local info = C_Map.GetMapInfo(zoneMapID)
@@ -80,34 +95,108 @@ local function ZoneContinent(zoneMapID)
     return (info and info.mapType == Enum.UIMapType.Continent) and info.mapID or nil
 end
 
-local function GetContinentNodes(continentMapID)
-    local nodes = continentNodes[continentMapID]
+local function PackSummaryCoordinate(x, y)
+    if x < 0 or x >= 1 or y < 0 or y >= 1 then return nil end
+    local packedX = math.floor(x * 10000 + 0.5)
+    local packedY = math.floor(y * 10000 + 0.5)
+    if packedX < 0 or packedX > 9999 or packedY < 0 or packedY > 9999 then return nil end
+    return packedX, packedY
+end
+
+local function NudgeSummaryCoordinate(nodes, x, y)
+    local packedX, packedY = PackSummaryCoordinate(x, y)
+    if not packedX then return nil end
+    while nodes[packedX * 10000 + packedY] do
+        if packedY < 9999 then
+            packedY = packedY + 1
+        elseif packedX < 9999 then
+            packedX = packedX + 1
+        else
+            return nil
+        end
+    end
+    return packedX * 10000 + packedY
+end
+
+local function GetContinentNodes(continentMapID, faction)
+    local factionKey = faction or "Neutral"
+    local continentCache = continentNodes[continentMapID]
+    if not continentCache then
+        continentCache = {}
+        continentNodes[continentMapID] = continentCache
+    end
+    local nodes = continentCache[factionKey]
     if nodes then return nodes end
+
     nodes = {}
-    for zoneMapID, zoneNodes in next, ns.Nodes do
-        if ZoneContinent(zoneMapID) == continentMapID then
-            for zoneCoord, npcID in next, zoneNodes do
-                local x = math.floor(zoneCoord / 10000) / 10000
-                local y = (zoneCoord % 10000) / 10000
-                local cx, cy = HBD:TranslateZoneCoordinates(x, y, zoneMapID, continentMapID)
-                if cx and cy then
-                    local coord = math.floor(cx * 10000 + 0.5) * 10000 + math.floor(cy * 10000 + 0.5)
-                    -- Projection compresses zones; nudge packed collisions
-                    -- (+0.0001 y) rather than dropping a vendor.
-                    while nodes[coord] do coord = coord + 1 end
-                    nodes[coord] = npcID
+    continentCache[factionKey] = nodes
+    ns.ZoneSummaryProjectionFailures = ns.ZoneSummaryProjectionFailures or {}
+    local continentFailures = ns.ZoneSummaryProjectionFailures[continentMapID]
+    if not continentFailures then
+        continentFailures = {}
+        ns.ZoneSummaryProjectionFailures[continentMapID] = continentFailures
+    end
+    local failures = {}
+    continentFailures[factionKey] = failures
+
+    local zoneMapIDs = {}
+    for zoneMapID in next, ns.Nodes do
+        local info = C_Map.GetMapInfo(zoneMapID)
+        if info and info.mapType and info.mapType > Enum.UIMapType.Continent and ZoneContinent(zoneMapID) == continentMapID then
+            zoneMapIDs[#zoneMapIDs + 1] = zoneMapID
+        end
+    end
+    table.sort(zoneMapIDs)
+
+    for _, zoneMapID in ipairs(zoneMapIDs) do
+        local vendors = {}
+        for _, npcID in next, ns.Nodes[zoneMapID] do
+            local vendor = ns.Vendors[npcID]
+            if vendor and (not vendor.faction or vendor.faction == faction) then
+                vendors[npcID] = true
+            end
+        end
+        local vendorCount = 0
+        for _ in next, vendors do
+            vendorCount = vendorCount + 1
+        end
+
+        if vendorCount > 0 then
+            local minX, maxX, minY, maxY = C_Map.GetMapRectOnMap(zoneMapID, continentMapID)
+            if not minX or not maxX or not minY or not maxY then
+                failures[zoneMapID] = "Map rectangle unavailable"
+            elseif minX >= maxX or minY >= maxY then
+                failures[zoneMapID] = "Map rectangle is degenerate"
+            else
+                local x = minX + (maxX - minX) * 0.5
+                local y = minY + (maxY - minY) * 0.5
+                local coord = NudgeSummaryCoordinate(nodes, x, y)
+                if not coord then
+                    failures[zoneMapID] = "Summary coordinate is outside map bounds"
+                else
+                    nodes[coord] = {
+                        kind = "zoneSummary",
+                        zoneMapID = zoneMapID,
+                        vendorCount = vendorCount,
+                    }
                 end
             end
         end
     end
-    continentNodes[continentMapID] = nodes
     return nodes
 end
 
 -- Node lookup shared by tooltip and click handlers: zone nodes come from the
 -- generated data, continent nodes from the projected cache.
-local function NodeAt(uiMapID, coord)
-    local nodes = ns.Nodes[uiMapID] or continentNodes[uiMapID]
+local function NodeAt(uiMapID, coord, faction)
+    local info = C_Map.GetMapInfo(uiMapID)
+    if info and info.mapType == Enum.UIMapType.Continent then
+        local continentCache = continentNodes[uiMapID]
+        local factionKey = faction or "Neutral"
+        local nodes = continentCache and continentCache[factionKey]
+        return nodes and nodes[coord] or nil
+    end
+    local nodes = ns.Nodes[uiMapID]
     return nodes and nodes[coord] or nil
 end
 
@@ -116,15 +205,19 @@ do
 
     local function iter(nodes, prestate)
         if not nodes then return nil end
-        local coord, npcID = next(nodes, prestate)
+        local coord, node = next(nodes, prestate)
         while coord do
-            local vendor = ns.Vendors[npcID]
+            -- luacheck: ignore 113
+            if type(node) == "table" and node.kind == "zoneSummary" then
+                return coord, nil, summaryIconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
+            end
+            local vendor = ns.Vendors[node]
             -- faction is pre-baked by the exporter: present only when the
             -- vendor is effectively Alliance/Horde; absent = show to all.
             if vendor and (not vendor.faction or vendor.faction == playerFaction) then
                 return coord, nil, iconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
             end
-            coord, npcID = next(nodes, coord)
+            coord, node = next(nodes, coord)
         end
         return nil
     end
@@ -133,10 +226,10 @@ do
         playerFaction = UnitFactionGroup("player")
         pathScale = minimap and MINIMAP_PIN_SCALE or WORLD_PIN_SCALE
         local nodes = ns.Nodes[uiMapID]
-        if not nodes and not minimap then
+        if not minimap then
             local info = C_Map.GetMapInfo(uiMapID)
             if info and info.mapType == Enum.UIMapType.Continent then
-                nodes = GetContinentNodes(uiMapID)
+                nodes = GetContinentNodes(uiMapID, playerFaction)
             end
         end
         return iter, nodes, nil
@@ -268,9 +361,8 @@ local function RenderTooltip(vendor)
 end
 
 function HNH:OnEnter(uiMapID, coord)
-    local npcID = NodeAt(uiMapID, coord)
-    local vendor = npcID and ns.Vendors[npcID]
-    if not vendor then return end
+    local node = NodeAt(uiMapID, coord, UnitFactionGroup("player"))
+    if not node then return end
 
     local tooltip = GameTooltip
     if self:GetCenter() > UIParent:GetCenter() then
@@ -278,6 +370,20 @@ function HNH:OnEnter(uiMapID, coord)
     else
         tooltip:SetOwner(self, "ANCHOR_RIGHT")
     end
+
+    -- luacheck: ignore 113
+    if type(node) == "table" and node.kind == "zoneSummary" then
+        currentHover = nil
+        local zone = C_Map.GetMapInfo(node.zoneMapID)
+        tooltip:SetText(zone and zone.name or "Unknown zone")
+        tooltip:AddLine(node.vendorCount .. " vendors")
+        tooltip:AddLine("Click to view zone")
+        tooltip:Show()
+        return
+    end
+
+    local vendor = ns.Vendors[node]
+    if not vendor then return end
 
     local token = {}
     currentHover = token
@@ -313,6 +419,15 @@ end
 -- Fires on both mouse-down and mouse-up, hence the `down` filter.
 function HNH:OnClick(button, down, uiMapID, coord)
     if button ~= "LeftButton" or down then return end
+    local node = NodeAt(uiMapID, coord, UnitFactionGroup("player"))
+    -- luacheck: ignore 113
+    if type(node) == "table" and node.kind == "zoneSummary" then
+        -- luacheck: ignore 113
+        if WorldMapFrame and WorldMapFrame.SetMapID then
+            WorldMapFrame:SetMapID(node.zoneMapID)
+        end
+        return
+    end
     -- Same guard + construction as Homestead's Utils/waypoints.lua: some
     -- maps reject user waypoints.
     if C_Map.CanSetUserWaypointOnMap and not C_Map.CanSetUserWaypointOnMap(uiMapID) then
@@ -386,7 +501,7 @@ frame:SetScript("OnEvent", function(self)
 
     db = LibStub("AceDB-3.0"):New("HandyNotesHomesteadDB", defaults, true)
     iconpath = ResolveIcon()
-    HBD = LibStub("HereBeDragons-2.0")
+    summaryIconpath = ResolveSummaryIcon()
     LibStub("AceEvent-3.0"):Embed(HNH)
 
     HandyNotes:RegisterPluginDB("Homestead", HNH, options)

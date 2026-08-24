@@ -19,6 +19,7 @@ local iconpath
 local VENDOR_ATLAS = "housing-decor-vendor_32"
 -- Stock POI texture so pins never silently vanish if a patch renames the atlas.
 local FALLBACK_ICON = "Interface\\MINIMAP\\TRACKING\\Banker"
+local SUMMARY_ATLAS = "FlightMaster"
 local SUMMARY_ICON = "Interface\\MINIMAP\\TRACKING\\FlightMaster"
 
 local defaults = {
@@ -50,7 +51,7 @@ local function ResolveIcon()
 end
 
 local function ResolveSummaryIcon()
-    local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(SUMMARY_ICON)
+    local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(SUMMARY_ATLAS)
     local file = info and (info.file or info.filename)
     if not file then
         return FALLBACK_ICON

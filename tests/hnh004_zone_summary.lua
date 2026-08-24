@@ -27,7 +27,7 @@ local function restoreAll()
     end
 end
 
-local function loadRuntime(addons, faction)
+local function loadRuntime(addons, faction, summaryAtlasAvailable)
     local registered
     local frame
     local factionState = { value = faction }
@@ -117,7 +117,13 @@ local function loadRuntime(addons, faction)
     _G.next = fixtureNext
     _G.pairs = fixturePairs
     _G.C_Map = mapApi
-    _G.C_Texture = { GetAtlasInfo = function() return { file = 12345 } end }
+    _G.C_Texture = {
+        GetAtlasInfo = function(atlas)
+            if atlas == "FlightMaster" and summaryAtlasAvailable ~= false then
+                return { file = 12345 }
+            end
+        end,
+    }
     _G.C_AddOns = { IsAddOnLoaded = function(name) return false, addons[name] end }
     _G.UnitFactionGroup = function() return factionState.value end
     _G.CreateFrame = function()
@@ -219,6 +225,11 @@ local function run()
     local first = checkSummaryAt(summaries, 15001500, 101, 2)
     checkSummaryAt(summaries, 15001501, 102, 1)
     check(first.icon ~= zoneVendor.icon, "summary must use a distinct icon")
+    check(first.icon == "Interface\\MINIMAP\\TRACKING\\FlightMaster", "summary atlas must resolve to the FlightMaster texture path")
+    local fallbackRuntime = { loadRuntime({}, "Alliance", false) }
+    local fallbackSummary = checkSummaryAt(collect(fallbackRuntime[1], 900, false), 15001500, 101, 2)
+    check(fallbackSummary.icon == "Interface\\MINIMAP\\TRACKING\\Banker", "summary must fall back to the Banker texture when its atlas is unavailable")
+    fallbackRuntime[8]()
     check(countNodes(collect(handler, 900, false)) == 2, "same-faction continent request must retain summaries")
     local repeatedBuildCalls = rectangleStats()
     check(repeatedBuildCalls == firstBuildCalls, "same-faction continent request must reuse its cached summary build")

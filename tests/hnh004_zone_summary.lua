@@ -220,8 +220,8 @@ local function checkSummaryAt(nodes, coord, zoneMapID, vendorCount)
     return node
 end
 
--- Gate 1 seam coverage only: Retail's actual GetMapRectOnMap returns remain
--- Gate 2 evidence. The stable rectangles below exercise every shipped key.
+-- Runtime-client coverage only: Retail's actual GetMapRectOnMap returns need
+-- live-client verification. The stable rectangles below exercise every shipped key.
 local function buildCurrentDataProjectionFixture(data)
     local fixture = { [900] = { mapID = 900, mapType = 2, name = "Fixture continent" } }
     local mapIDs = {}

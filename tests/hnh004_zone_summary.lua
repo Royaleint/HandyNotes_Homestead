@@ -27,7 +27,7 @@ local function restoreAll()
     end
 end
 
-local function loadRuntime(addons, faction, summaryAtlasAvailable)
+local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider)
     local registered
     local frame
     local factionState = { value = faction }
@@ -38,7 +38,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable)
     local rectangleOrder = {}
     local itemCached = true
     local itemLoadCallbacks = {}
-    local fixture = {
+    local fixture = runtimeFixture or {
         [900] = { mapID = 900, mapType = 2 },
         [101] = { mapID = 101, mapType = 3, parentMapID = 900, name = "Alpha" },
         [102] = { mapID = 102, mapType = 3, parentMapID = 900, name = "Bravo" },
@@ -49,6 +49,9 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable)
         GetMapRectOnMap = function(zoneMapID, continentMapID)
             rectangleCalls = rectangleCalls + 1
             rectangleOrder[#rectangleOrder + 1] = zoneMapID
+            if rectangleProvider then
+                return rectangleProvider(zoneMapID, continentMapID)
+            end
             if continentMapID ~= 900 or zoneMapID == 103 then return nil end
             return 0.1, 0.2, 0.99985, 0.99995
         end,
@@ -57,7 +60,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable)
         ClearUserWaypoint = function() waypoint.clear = waypoint.clear + 1 end,
         SetUserWaypoint = function() waypoint.set = waypoint.set + 1 end,
     }
-    local data = {
+    local data = runtimeData or {
         Nodes = {
             [101] = { [10001000] = 1, [20002000] = 1, [30003000] = 2 },
             [102] = { [40004000] = 3, [50005000] = 4 },
@@ -97,7 +100,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable)
     local nativePairs = pairs
     local forcedZoneOrder = { 102, 101, 103, 900 }
     local function fixtureNext(table, key)
-        if table ~= data.Nodes then return nativeNext(table, key) end
+        if table ~= data.Nodes or runtimeData then return nativeNext(table, key) end
         local index = 0
         if key then
             for position, zoneMapID in ipairs(forcedZoneOrder) do
@@ -217,6 +220,92 @@ local function checkSummaryAt(nodes, coord, zoneMapID, vendorCount)
     return node
 end
 
+-- Gate 1 seam coverage only: Retail's actual GetMapRectOnMap returns remain
+-- Gate 2 evidence. The stable rectangles below exercise every shipped key.
+local function buildCurrentDataProjectionFixture(data)
+    local fixture = { [900] = { mapID = 900, mapType = 2, name = "Fixture continent" } }
+    local mapIDs = {}
+    for mapID in pairs(data.Nodes) do
+        mapIDs[#mapIDs + 1] = mapID
+    end
+    table.sort(mapIDs)
+    for _, mapID in ipairs(mapIDs) do
+        fixture[mapID] = { mapID = mapID, mapType = 3, parentMapID = 900, name = "Fixture zone " .. mapID }
+    end
+
+    local indexByMapID = {}
+    for index, mapID in ipairs(mapIDs) do
+        indexByMapID[mapID] = index
+    end
+    local function rectangleForMap(zoneMapID, continentMapID)
+        local index = continentMapID == 900 and indexByMapID[zoneMapID]
+        if not index then return nil end
+        local column = (index - 1) % 10
+        local row = math.floor((index - 1) / 10)
+        return column / 10 + 0.01, column / 10 + 0.02, row / 10 + 0.01, row / 10 + 0.02
+    end
+    return fixture, mapIDs, rectangleForMap
+end
+
+local function runCurrentDataProjectionCoverage()
+    local data = { Nodes = realData.Nodes, Vendors = realData.Vendors }
+    local fixture, mapIDs, rectangleForMap = buildCurrentDataProjectionFixture(data)
+    local handler, _, _, _, setFaction, rectangleStats = loadRuntime({}, "Alliance", nil, data, fixture, rectangleForMap)
+    local factionRuns = {
+        { key = "Alliance", value = "Alliance" },
+        { key = "Horde", value = "Horde" },
+        { key = "Neutral", value = nil },
+    }
+    local knownFactions = { Alliance = true, Horde = true, Neutral = true }
+    for _, vendor in pairs(data.Vendors) do
+        if vendor.faction and not knownFactions[vendor.faction] then
+            knownFactions[vendor.faction] = true
+            factionRuns[#factionRuns + 1] = { key = vendor.faction, value = vendor.faction }
+        end
+    end
+
+    for _, faction in ipairs(factionRuns) do
+        setFaction(faction.value)
+        local summaries = collect(handler, 900, false)
+        local emitted = {}
+        for _, node in pairs(summaries) do
+            local record = node.record
+            if type(record) == "table" and record.kind == "zoneSummary" then
+                emitted[record.zoneMapID] = true
+            end
+        end
+        local failures = data.ZoneSummaryProjectionFailures and data.ZoneSummaryProjectionFailures[900]
+        failures = failures and failures[faction.key] or {}
+        for _, mapID in ipairs(mapIDs) do
+            local eligible = false
+            for _, npcID in pairs(data.Nodes[mapID]) do
+                local vendor = data.Vendors[npcID]
+                if vendor and (not vendor.faction or vendor.faction == faction.value) then
+                    eligible = true
+                    break
+                end
+            end
+            if eligible then
+                local failure = failures[mapID]
+                check(emitted[mapID] or (type(failure) == "string" and #failure > 0), "current-data " .. faction.key .. " zone " .. mapID .. " must emit a summary or a projection failure")
+            end
+        end
+    end
+
+    local _, rectangleOrder = rectangleStats()
+    local visited = {}
+    for _, mapID in ipairs(rectangleOrder) do
+        visited[mapID] = true
+    end
+    local missing = {}
+    for _, mapID in ipairs(mapIDs) do
+        if not visited[mapID] then
+            missing[#missing + 1] = mapID
+        end
+    end
+    check(#missing == 0, "current-data rectangle seam did not visit map IDs: " .. table.concat(missing, ","))
+end
+
 local function run()
     local standalone = { loadRuntime({}, "Alliance") }
     check(standalone[1], "standalone registration did not capture a plugin handler")
@@ -305,6 +394,7 @@ local function run()
     for coord, node in pairs(minimapNodes) do
         check(type(node.record) ~= "table" or node.record.kind ~= "zoneSummary", "minimap node at " .. coord .. " must not be a synthesized zoneSummary")
     end
+    runCurrentDataProjectionCoverage()
 end
 
 local ok, err = xpcall(run, debug.traceback)

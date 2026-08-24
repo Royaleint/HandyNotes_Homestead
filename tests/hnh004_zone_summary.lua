@@ -36,6 +36,8 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable)
     local mapSelection
     local rectangleCalls = 0
     local rectangleOrder = {}
+    local itemCached = true
+    local itemLoadCallbacks = {}
     local fixture = {
         [900] = { mapID = 900, mapType = 2 },
         [101] = { mapID = 101, mapType = 3, parentMapID = 900, name = "Alpha" },
@@ -152,8 +154,19 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable)
     _G.UiMapPoint = { CreateFromCoordinates = function(_, x, y) return { x = x, y = y } end }
     _G.C_SuperTrack = { SetSuperTrackedUserWaypoint = function() waypoint.superTrack = waypoint.superTrack + 1 end }
     _G.C_CurrencyInfo = { GetCoinTextureString = function(price) return tostring(price) end, GetCurrencyInfo = function() end }
-    _G.C_Item = { GetItemInfo = function() return "Cached item" end, DoesItemExistByID = function() return false end }
-    _G.Item = { CreateFromItemID = function() return { ContinueOnItemLoad = function() end } end }
+    _G.C_Item = {
+        GetItemInfo = function() return itemCached and "Cached item" or nil end,
+        DoesItemExistByID = function() return true end,
+    }
+    _G.Item = {
+        CreateFromItemID = function()
+            return {
+                ContinueOnItemLoad = function(_, callback)
+                    itemLoadCallbacks[#itemLoadCallbacks + 1] = callback
+                end,
+            }
+        end,
+    }
     _G.HandyNotes = {
         RegisterPluginDB = function(_, _, handler) registered = handler end,
         getXY = function(_, coord) return math.floor(coord / 10000) / 10000, (coord % 10000) / 10000 end,
@@ -171,7 +184,8 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable)
     assert(loadfile("HandyNotes_Homestead.lua"))("HandyNotes_Homestead", data)
     frame.scripts.OnEvent(frame)
     return registered, tooltip, waypoint, function() return mapSelection end, function(value) factionState.value = value end,
-        function() return rectangleCalls, rectangleOrder end, forcedZoneOrder, restore, data
+        function() return rectangleCalls, rectangleOrder end, forcedZoneOrder, restore, data,
+        function(value) itemCached = value end, itemLoadCallbacks
 end
 
 local function collect(handler, mapID, minimap)
@@ -214,7 +228,7 @@ local function run()
     check(not devBuild[1], "Homestead_DevBuild-enabled path registered the plugin")
     devBuild[8]()
 
-    local handler, tooltip, waypoint, selectedMap, setFaction, rectangleStats, forcedZoneOrder, _, data = loadRuntime({}, "Alliance")
+    local handler, tooltip, waypoint, selectedMap, setFaction, rectangleStats, forcedZoneOrder, _, data, setItemCached, itemLoadCallbacks = loadRuntime({}, "Alliance")
     check(forcedZoneOrder[1] == 102 and forcedZoneOrder[2] == 101, "collision fixture must enumerate zones out of sorted order")
     local zoneNodes = collect(handler, 101, false)
     local zoneVendor = zoneNodes[10001000]
@@ -272,6 +286,13 @@ local function run()
     check(#tooltip.lines == 3 and tooltip.lines[1] == "Alpha" and tooltip.lines[2] == "2 vendors", "summary tooltip must contain only the zone and vendor count")
     check(type(tooltip.lines[3]) == "string" and string.find(string.lower(tooltip.lines[3]), "click"), "summary tooltip must include a click instruction")
     check(not string.find(table.concat(tooltip.lines, "\n"), "Alliance vendor") and not string.find(table.concat(tooltip.lines, "\n"), "Wares") and not string.find(table.concat(tooltip.lines, "\n"), "Cached item"), "summary tooltip must not render vendor wares or item lines")
+    setItemCached(false)
+    handler.OnEnter(pin, 101, 10001000)
+    check(#itemLoadCallbacks == 1, "uncached vendor tooltip must retain its item-load callback")
+    handler.OnEnter(pin, 900, 15009999)
+    local summaryTooltip = table.concat(tooltip.lines, "\n")
+    itemLoadCallbacks[1]()
+    check(table.concat(tooltip.lines, "\n") == summaryTooltip, "stale vendor item-load callback must not replace the summary tooltip")
     handler:OnClick("LeftButton", false, 900, 15009999)
     check(selectedMap() == 101, "summary click must navigate to its zone")
     check(waypoint.set == 0 and waypoint.clear == 0 and waypoint.superTrack == 0, "summary click must not set, clear, or super-track a waypoint")

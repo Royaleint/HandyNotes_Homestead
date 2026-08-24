@@ -373,6 +373,7 @@ function HNH:OnEnter(uiMapID, coord)
 
     -- luacheck: ignore 113
     if type(node) == "table" and node.kind == "zoneSummary" then
+        currentHover = nil
         local zone = C_Map.GetMapInfo(node.zoneMapID)
         tooltip:SetText(zone and zone.name or "Unknown zone")
         tooltip:AddLine(node.vendorCount .. " vendors")

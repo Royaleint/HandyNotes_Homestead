@@ -27,7 +27,7 @@ local function restoreAll()
     end
 end
 
-local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider)
+local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider, hbdTranslation)
     local registered
     local frame
     local factionState = { value = faction }
@@ -179,7 +179,12 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
             return { New = function() return { profile = { icon_scale = 1, icon_alpha = 1 } } end }
         end
         if name == "HereBeDragons-2.0" then
-            return { TranslateZoneCoordinates = function(_, x, y) return x, y end }
+            return { TranslateZoneCoordinates = function(_, x, y, sourceMapID, targetMapID)
+                if hbdTranslation then
+                    return hbdTranslation(x, y, sourceMapID, targetMapID)
+                end
+                return nil
+            end }
         end
         return { Embed = function(_, target) target.SendMessage = function() end end }
     end
@@ -306,6 +311,54 @@ local function runCurrentDataProjectionCoverage()
     check(#missing == 0, "current-data rectangle seam did not visit map IDs: " .. table.concat(missing, ","))
 end
 
+local function runNestedProjectionRegression()
+    local data = {
+        Nodes = {
+            [101] = { [10001000] = 1 },
+        },
+        Vendors = {
+            [1] = { name = "Nested vendor", items = {} },
+        },
+    }
+    local fixture = {
+        [900] = { mapID = 900, mapType = 2, name = "Fixture continent" },
+        [910] = { mapID = 910, mapType = 3, parentMapID = 900, name = "Fixture sub-continent" },
+        [101] = { mapID = 101, mapType = 3, parentMapID = 910, name = "Nested zone" },
+    }
+    local function adjacentRectangles(sourceMapID, targetMapID)
+        if sourceMapID == 101 and targetMapID == 910 then
+            return 0.2, 0.4, 0.3, 0.5
+        end
+        if sourceMapID == 910 and targetMapID == 900 then
+            return 0.1, 0.3, 0.2, 0.4
+        end
+        return nil
+    end
+    local handler, _, _, _, _, rectangleStats = loadRuntime({}, "Alliance", nil, data, fixture, adjacentRectangles)
+    local summaries = collect(handler, 900, false)
+    checkSummaryAt(summaries, 16002800, 101, 1)
+    local calls, order = rectangleStats()
+    check(calls == 2 and order[1] == 101 and order[2] == 910, "nested projection must walk adjacent map parents instead of requesting a direct zone-to-continent rectangle")
+end
+
+local function runHBDProjectionFallback()
+    local data = {
+        Nodes = { [101] = { [10001000] = 1 } },
+        Vendors = { [1] = { name = "Fallback vendor", items = {} } },
+    }
+    local fixture = {
+        [900] = { mapID = 900, mapType = 2, name = "Fixture continent" },
+        [910] = { mapID = 910, mapType = 3, parentMapID = 900, name = "Fallback sub-continent" },
+        [101] = { mapID = 101, mapType = 3, parentMapID = 910, name = "Fallback zone" },
+    }
+    local function hbdTranslation(_, _, sourceMapID, targetMapID)
+        if sourceMapID == 101 and targetMapID == 900 then return 0.6, 0.7 end
+    end
+    local handler = loadRuntime({}, "Alliance", nil, data, fixture, function() return nil end, hbdTranslation)
+    local summaries = collect(handler, 900, false)
+    checkSummaryAt(summaries, 60007000, 101, 1)
+end
+
 local function run()
     local standalone = { loadRuntime({}, "Alliance") }
     check(standalone[1], "standalone registration did not capture a plugin handler")
@@ -395,6 +448,8 @@ local function run()
         check(type(node.record) ~= "table" or node.record.kind ~= "zoneSummary", "minimap node at " .. coord .. " must not be a synthesized zoneSummary")
     end
     runCurrentDataProjectionCoverage()
+    runNestedProjectionRegression()
+    runHBDProjectionFallback()
 end
 
 local ok, err = xpcall(run, debug.traceback)

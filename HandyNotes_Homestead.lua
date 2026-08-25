@@ -81,13 +81,14 @@ local continentOverlaysOnParent = { [2537] = 13 }
 local overlayZoneExclusions = {
     [2537] = {
         [2405] = true, [15958] = true, [2444] = true, [2694] = true, [2576] = true, [2413] = true,
-        [2599] = true, -- Val is native to the Quel'Thalas map, not the EK overlay.
+        [2599] = true, [2512] = true, [2509] = true, -- Native child maps stay off the EK overlay.
     },
 }
 local continentZoneGroups = {
     [2537] = {
         { mapID = 2405, members = { 2405, 2599, 2444, 15958 } },
-        { mapID = 2694, members = { 2694, 2576, 2413 } },
+        { mapID = 2694, anchorMapIDs = { 2694, 2576, 2413 }, members = { 2694, 2576, 2413 } },
+        { mapID = 2512, members = { 2512, 2509 } },
     },
 }
 
@@ -295,7 +296,12 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
                 local vendorCount = 0
                 for _ in next, vendors do vendorCount = vendorCount + 1 end
                 if vendorCount > 0 then
-                    local x, y, projectionReason = ProjectZoneCenterToMap(group.mapID, viewMapID)
+                    local x, y, projectionReason
+                    local anchorMapIDs = group.anchorMapIDs or { group.mapID }
+                    for _, anchorMapID in ipairs(anchorMapIDs) do
+                        x, y, projectionReason = ProjectZoneCenterToMap(anchorMapID, viewMapID)
+                        if x and y then break end
+                    end
                     if not x or not y then
                         failures[group.mapID] = projectionReason
                     else

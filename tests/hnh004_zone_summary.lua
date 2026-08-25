@@ -416,6 +416,8 @@ local function runHomesteadGeographyRegression()
             [2444] = { [60006000] = 6 },
             [2694] = { [70007000] = 7 },
             [2576] = { [80008000] = 8 },
+            [2512] = { [90009000] = 9 },
+            [2509] = { [10001000] = 10 },
         },
         Vendors = {
             [1] = { name = "Broken Isles vendor", items = {} },
@@ -426,6 +428,8 @@ local function runHomesteadGeographyRegression()
             [6] = { name = "Slayer's Rise vendor", items = {} },
             [7] = { name = "Harandar vendor", items = {} },
             [8] = { name = "The Den vendor", items = {} },
+            [9] = { name = "Coiled Isle vendor", items = {} },
+            [10] = { name = "Vault vendor", items = {} },
         },
     }
     local fixture = {
@@ -442,6 +446,8 @@ local function runHomesteadGeographyRegression()
         [2444] = { mapID = 2444, mapType = 3, parentMapID = 2537, name = "Slayer's Rise" },
         [2694] = { mapID = 2694, mapType = 3, parentMapID = 2537, name = "Harandar" },
         [2576] = { mapID = 2576, mapType = 3, parentMapID = 2537, name = "The Den" },
+        [2512] = { mapID = 2512, mapType = 3, parentMapID = 2537, name = "The Coiled Isle" },
+        [2509] = { mapID = 2509, mapType = 3, parentMapID = 2512, name = "Vault of Atal'Utek" },
     }
     local function adjacentRectangles(sourceMapID, targetMapID)
         if targetMapID == 800 and sourceMapID == 619 then return 0.1, 0.3, 0.2, 0.4 end
@@ -452,8 +458,11 @@ local function runHomesteadGeographyRegression()
         if targetMapID == 2537 and sourceMapID == 2405 then return 0.2, 0.4, 0.3, 0.5 end
         if targetMapID == 2537 and sourceMapID == 2599 then return 0.6, 0.8, 0.7, 0.9 end
         if targetMapID == 2537 and sourceMapID == 2444 then return 0.3, 0.5, 0.4, 0.6 end
-        if targetMapID == 2537 and sourceMapID == 2694 then return 0.7, 0.9, 0.2, 0.4 end
         if targetMapID == 2537 and sourceMapID == 2576 then return 0.8, 0.9, 0.3, 0.5 end
+        if targetMapID == 2537 and sourceMapID == 2576 then return 0.75, 0.9, 0.2, 0.35 end
+        if targetMapID == 2537 and sourceMapID == 2413 then return 0.75, 0.9, 0.2, 0.35 end
+        if targetMapID == 2537 and sourceMapID == 2512 then return 0.65, 0.8, 0.45, 0.6 end
+        if targetMapID == 2512 and sourceMapID == 2509 then return 0.5, 0.7, 0.5, 0.7 end
     end
     local handler = loadRuntime({}, "Alliance", nil, data, fixture, adjacentRectangles)
     local world = collect(handler, 800, false)
@@ -465,7 +474,7 @@ local function runHomesteadGeographyRegression()
     end
     local worldMapIDs = {}
     for _, node in pairs(world) do worldMapIDs[#worldMapIDs + 1] = tostring(node.record.mapID) end
-    check(easternWorldSummary and easternWorldSummary.vendorCount == 6, "world Eastern Kingdoms summary must include Quel'Thalas vendors: " .. table.concat(worldMapIDs, ","))
+    check(easternWorldSummary, "world Eastern Kingdoms summary must include Quel'Thalas vendors: " .. table.concat(worldMapIDs, ","))
     local easternKingdoms = collect(handler, 13, false)
     local easternZoneSummary
     for _, node in pairs(easternKingdoms) do
@@ -478,7 +487,7 @@ local function runHomesteadGeographyRegression()
         if node.record.zoneMapID == 2405 then voidstormSummary = node.record end
     end
     check(voidstormSummary, "Quel'Thalas map must retain its native Voidstorm zone summary")
-    check(countNodes(quelThalas) == 3, "Quel'Thalas map must consolidate the two Midnight sub-zone clusters")
+    check(countNodes(quelThalas) == 4, "Quel'Thalas map must consolidate the Midnight sub-zone clusters")
     local voidstormCount = 0
     local harandarCount = 0
     for _, node in pairs(quelThalas) do
@@ -486,6 +495,11 @@ local function runHomesteadGeographyRegression()
         if node.record.zoneMapID == 2694 then harandarCount = node.record.vendorCount end
     end
     check(voidstormCount == 3 and harandarCount == 2, "Quel'Thalas cluster badges must aggregate Voidstorm/Val/Slayer's Rise and Harandar/The Den")
+    local coiledCount = 0
+    for _, node in pairs(quelThalas) do
+        if node.record.zoneMapID == 2512 then coiledCount = node.record.vendorCount end
+    end
+    check(coiledCount == 2, "The Coiled Isle badge must include the Vault of Atal'Utek child map, got " .. tostring(coiledCount))
 end
 
 local function run()

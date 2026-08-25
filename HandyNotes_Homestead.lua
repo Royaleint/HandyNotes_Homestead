@@ -86,6 +86,7 @@ local MINIMAP_PIN_SCALE = 1.0
 
 local HBD
 local continentNodes = {}
+local worldNodes = {}
 local summaryIconpath = FALLBACK_ICON
 
 local function ZoneContinent(zoneMapID)
@@ -170,31 +171,38 @@ local function NudgeSummaryCoordinate(nodes, x, y)
     return packedX * 10000 + packedY
 end
 
-local function GetContinentNodes(continentMapID, faction)
+local function GetProjectedNodes(viewMapID, faction, isWorld)
     local factionKey = faction or "Neutral"
-    local continentCache = continentNodes[continentMapID]
-    if not continentCache then
-        continentCache = {}
-        continentNodes[continentMapID] = continentCache
+    local viewCache = isWorld and worldNodes or continentNodes
+    local cachedNodes = viewCache[viewMapID]
+    if not cachedNodes then
+        cachedNodes = {}
+        viewCache[viewMapID] = cachedNodes
     end
-    local nodes = continentCache[factionKey]
+    local nodes = cachedNodes[factionKey]
     if nodes then return nodes end
 
     nodes = {}
-    continentCache[factionKey] = nodes
+    cachedNodes[factionKey] = nodes
     ns.ZoneSummaryProjectionFailures = ns.ZoneSummaryProjectionFailures or {}
-    local continentFailures = ns.ZoneSummaryProjectionFailures[continentMapID]
-    if not continentFailures then
-        continentFailures = {}
-        ns.ZoneSummaryProjectionFailures[continentMapID] = continentFailures
+    local viewFailures = ns.ZoneSummaryProjectionFailures[viewMapID]
+    if not viewFailures then
+        viewFailures = {}
+        ns.ZoneSummaryProjectionFailures[viewMapID] = viewFailures
     end
     local failures = {}
-    continentFailures[factionKey] = failures
+    viewFailures[factionKey] = failures
 
     local zoneMapIDs = {}
     for zoneMapID in next, ns.Nodes do
         local info = C_Map.GetMapInfo(zoneMapID)
-        if info and info.mapType and info.mapType > Enum.UIMapType.Continent and ZoneContinent(zoneMapID) == continentMapID then
+        local belongsToView
+        if isWorld then
+            belongsToView = ZoneContinent(zoneMapID) ~= nil
+        else
+            belongsToView = ZoneContinent(zoneMapID) == viewMapID
+        end
+        if info and info.mapType and info.mapType > Enum.UIMapType.Continent and belongsToView then
             zoneMapIDs[#zoneMapIDs + 1] = zoneMapID
         end
     end
@@ -214,7 +222,7 @@ local function GetContinentNodes(continentMapID, faction)
         end
 
         if vendorCount > 0 then
-            local x, y, projectionReason = ProjectZoneCenterToMap(zoneMapID, continentMapID)
+            local x, y, projectionReason = ProjectZoneCenterToMap(zoneMapID, viewMapID)
             if not x or not y then
                 failures[zoneMapID] = projectionReason
             else
@@ -238,10 +246,11 @@ end
 -- generated data, continent nodes from the projected cache.
 local function NodeAt(uiMapID, coord, faction)
     local info = C_Map.GetMapInfo(uiMapID)
-    if info and info.mapType == Enum.UIMapType.Continent then
-        local continentCache = continentNodes[uiMapID]
+    if info and (info.mapType == Enum.UIMapType.Continent or info.mapType == Enum.UIMapType.World) then
+        local viewCache = info.mapType == Enum.UIMapType.World and worldNodes or continentNodes
         local factionKey = faction or "Neutral"
-        local nodes = continentCache and continentCache[factionKey]
+        local cachedNodes = viewCache[uiMapID]
+        local nodes = cachedNodes and cachedNodes[factionKey]
         return nodes and nodes[coord] or nil
     end
     local nodes = ns.Nodes[uiMapID]
@@ -277,7 +286,9 @@ do
         if not minimap then
             local info = C_Map.GetMapInfo(uiMapID)
             if info and info.mapType == Enum.UIMapType.Continent then
-                nodes = GetContinentNodes(uiMapID, playerFaction)
+                nodes = GetProjectedNodes(uiMapID, playerFaction, false)
+            elseif info and info.mapType == Enum.UIMapType.World then
+                nodes = GetProjectedNodes(uiMapID, playerFaction, true)
             end
         end
         return iter, nodes, nil

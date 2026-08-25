@@ -124,6 +124,15 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     _G.C_Map = mapApi
     _G.C_Texture = {
         GetAtlasInfo = function(atlas)
+            if atlas == "housing-decor-vendor_32" then
+                return {
+                    file = 54321,
+                    leftTexCoord = 0.11,
+                    rightTexCoord = 0.89,
+                    topTexCoord = 0.21,
+                    bottomTexCoord = 0.79,
+                }
+            end
             if atlas == "FlightMaster" and summaryAtlasAvailable ~= false then
                 return {
                     file = 12345,
@@ -410,11 +419,11 @@ local function run()
     check(firstBuildCalls == 3 and firstBuildOrder[1] == 101 and firstBuildOrder[2] == 102 and firstBuildOrder[3] == 103, "summary builder must sort zone IDs before collision nudging")
     local first = checkSummaryAt(summaries, 15009999, 101, 2)
     checkSummaryAt(summaries, 15019999, 102, 1)
-    check(first.icon ~= zoneVendor.icon, "summary must use a distinct icon")
-    check(type(first.icon) == "table" and first.icon.icon == 12345 and first.icon.tCoordLeft == 0.1 and first.icon.tCoordRight == 0.9 and first.icon.tCoordTop == 0.2 and first.icon.tCoordBottom == 0.8, "summary must use the resolved FlightMaster atlas payload")
+    check(type(first.icon) == "table" and first.icon.icon == 54321 and first.icon.tCoordLeft == 0.11 and first.icon.tCoordRight == 0.89 and first.icon.tCoordTop == 0.21 and first.icon.tCoordBottom == 0.79, "summary must use the resolved housing-decor-vendor atlas payload")
+    check(first.icon.icon == zoneVendor.icon.icon and first.icon.tCoordLeft == zoneVendor.icon.tCoordLeft and first.icon.tCoordRight == zoneVendor.icon.tCoordRight and first.icon.tCoordTop == zoneVendor.icon.tCoordTop and first.icon.tCoordBottom == zoneVendor.icon.tCoordBottom, "summary must use the same vendor icon as normal HNH pins")
     local fallbackRuntime = { loadRuntime({}, "Alliance", false) }
     local fallbackSummary = checkSummaryAt(collect(fallbackRuntime[1], 900, false), 15009999, 101, 2)
-    check(fallbackSummary.icon == "Interface\\MINIMAP\\TRACKING\\Banker", "summary must fall back to the Banker texture when its atlas is unavailable")
+    check(fallbackSummary.icon.icon == 54321, "summary must continue using the vendor atlas when the removed summary atlas is unavailable")
     fallbackRuntime[8]()
     check(countNodes(collect(handler, 900, false)) == 2, "same-faction continent request must retain summaries")
     local repeatedBuildCalls = rectangleStats()

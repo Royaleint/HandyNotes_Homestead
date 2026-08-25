@@ -19,7 +19,6 @@ local iconpath
 local VENDOR_ATLAS = "housing-decor-vendor_32"
 -- Stock POI texture so pins never silently vanish if a patch renames the atlas.
 local FALLBACK_ICON = "Interface\\MINIMAP\\TRACKING\\Banker"
-local SUMMARY_ATLAS = "FlightMaster"
 
 local defaults = {
     profile = {
@@ -36,21 +35,6 @@ local function ResolveIcon()
     local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(VENDOR_ATLAS)
     -- AtlasInfo carries either `file` (file ID) or `filename` (path);
     -- either works with SetTexture.
-    local file = info and (info.file or info.filename)
-    if not file then
-        return FALLBACK_ICON
-    end
-    return {
-        icon = file,
-        tCoordLeft = info.leftTexCoord,
-        tCoordRight = info.rightTexCoord,
-        tCoordTop = info.topTexCoord,
-        tCoordBottom = info.bottomTexCoord,
-    }
-end
-
-local function ResolveSummaryIcon()
-    local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(SUMMARY_ATLAS)
     local file = info and (info.file or info.filename)
     if not file then
         return FALLBACK_ICON
@@ -561,7 +545,7 @@ frame:SetScript("OnEvent", function(self)
     db = LibStub("AceDB-3.0"):New("HandyNotesHomesteadDB", defaults, true)
     HBD = LibStub("HereBeDragons-2.0")
     iconpath = ResolveIcon()
-    summaryIconpath = ResolveSummaryIcon()
+    summaryIconpath = iconpath
     LibStub("AceEvent-3.0"):Embed(HNH)
 
     HandyNotes:RegisterPluginDB("Homestead", HNH, options)

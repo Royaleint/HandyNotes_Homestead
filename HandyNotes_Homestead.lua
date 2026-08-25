@@ -84,6 +84,7 @@ local MINIMAP_PIN_SCALE = 1.0
 -- per zone at its rectangle center when the continent is first viewed.
 -------------------------------------------------------------------------------
 
+local HBD
 local continentNodes = {}
 local summaryIconpath = FALLBACK_ICON
 
@@ -93,6 +94,57 @@ local function ZoneContinent(zoneMapID)
         info = C_Map.GetMapInfo(info.parentMapID)
     end
     return (info and info.mapType == Enum.UIMapType.Continent) and info.mapID or nil
+end
+
+local function ProjectZoneCenterToMap(zoneMapID, continentMapID)
+    if zoneMapID == continentMapID then return 0.5, 0.5, "same_map" end
+
+    local currentMapID = zoneMapID
+    local x, y = 0.5, 0.5
+    local visited = {}
+    local failureReason
+
+    while currentMapID and currentMapID ~= continentMapID do
+        if visited[currentMapID] then
+            failureReason = "map_parent_cycle"
+            break
+        end
+        visited[currentMapID] = true
+
+        local info = C_Map.GetMapInfo(currentMapID)
+        local parentMapID = info and info.parentMapID
+        if not parentMapID then
+            failureReason = "no_parent_path"
+            break
+        end
+
+        local minX, maxX, minY, maxY = C_Map.GetMapRectOnMap(currentMapID, parentMapID)
+        if minX == nil or maxX == nil or minY == nil or maxY == nil then
+            failureReason = "map_rectangle_unavailable"
+            break
+        end
+        if minX == maxX and minY == maxY then
+            failureReason = "map_rectangle_degenerate"
+            break
+        end
+
+        x = minX + ((maxX - minX) * x)
+        y = minY + ((maxY - minY) * y)
+        currentMapID = parentMapID
+    end
+
+    if currentMapID == continentMapID and x >= 0 and x < 1 and y >= 0 and y < 1 then
+        return x, y, "rect_projection"
+    end
+
+    if HBD and HBD.TranslateZoneCoordinates then
+        local fallbackX, fallbackY = HBD:TranslateZoneCoordinates(0.5, 0.5, zoneMapID, continentMapID)
+        if fallbackX and fallbackY and fallbackX >= 0 and fallbackX < 1 and fallbackY >= 0 and fallbackY < 1 then
+            return fallbackX, fallbackY, "hbd_fallback"
+        end
+    end
+
+    return nil, nil, failureReason or "no_parent_path"
 end
 
 local function PackSummaryCoordinate(x, y)
@@ -162,14 +214,10 @@ local function GetContinentNodes(continentMapID, faction)
         end
 
         if vendorCount > 0 then
-            local minX, maxX, minY, maxY = C_Map.GetMapRectOnMap(zoneMapID, continentMapID)
-            if not minX or not maxX or not minY or not maxY then
-                failures[zoneMapID] = "Map rectangle unavailable"
-            elseif minX >= maxX or minY >= maxY then
-                failures[zoneMapID] = "Map rectangle is degenerate"
+            local x, y, projectionReason = ProjectZoneCenterToMap(zoneMapID, continentMapID)
+            if not x or not y then
+                failures[zoneMapID] = projectionReason
             else
-                local x = minX + (maxX - minX) * 0.5
-                local y = minY + (maxY - minY) * 0.5
                 local coord = NudgeSummaryCoordinate(nodes, x, y)
                 if not coord then
                     failures[zoneMapID] = "Summary coordinate is outside map bounds"
@@ -500,6 +548,7 @@ frame:SetScript("OnEvent", function(self)
     if homesteadLoaded or devBuildLoaded then return end
 
     db = LibStub("AceDB-3.0"):New("HandyNotesHomesteadDB", defaults, true)
+    HBD = LibStub("HereBeDragons-2.0")
     iconpath = ResolveIcon()
     summaryIconpath = ResolveSummaryIcon()
     LibStub("AceEvent-3.0"):Embed(HNH)

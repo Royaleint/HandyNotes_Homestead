@@ -1,7 +1,7 @@
 --[[
     HandyNotes_Homestead - Data
     GENERATED from Homestead vendor data: do not hand-edit.
-    Source: Homestead main eef3a77 (12.1) 2026-08-13
+    Source: Homestead v2.10.0
 ]]
 
 local _, ns = ...
@@ -456,7 +456,7 @@ ns.Vendors = {
         zone = "Northern Stranglethorn",
         subzone = "Nesingwary's Expedition",
         items = {
-            { id = 248808 },
+            { id = 248808, price = 4500000 },
         },
     },
     [3178] = {
@@ -491,8 +491,8 @@ ns.Vendors = {
         subzone = "Tranquillien",
         faction = "Horde",
         items = {
-            { id = 256049 },
-            { id = 257419 },
+            { id = 256049, price = 50000000 },
+            { id = 257419, price = 50000000 },
         },
     },
     [23995] = {
@@ -552,7 +552,7 @@ ns.Vendors = {
         zone = "Eastern Plaguelands",
         subzone = "Caravan",
         items = {
-            { id = 248796 },
+            { id = 248796, price = 30000000 },
         },
     },
     [48258] = {
@@ -605,8 +605,8 @@ ns.Vendors = {
         subzone = "Gates of Orgrimmar",
         faction = "Horde",
         items = {
-            { id = 245504 },
-            { id = 245505 },
+            { id = 245504, price = 1500000 },
+            { id = 245505, price = 1000000 },
         },
     },
     [50307] = {
@@ -655,8 +655,8 @@ ns.Vendors = {
         zone = "The Jade Forest",
         subzone = "The Arboretum",
         items = {
-            { id = 247730 },
-            { id = 247732 },
+            { id = 247730, price = 10000000 },
+            { id = 247732, price = 5000000 },
         },
     },
     [58706] = {
@@ -664,11 +664,11 @@ ns.Vendors = {
         zone = "Valley of the Four Winds",
         subzone = "Halfhill",
         items = {
-            { id = 245508 },
-            { id = 247670 },
-            { id = 247734 },
-            { id = 247737 },
-            { id = 248663 },
+            { id = 245508, price = 10000000 },
+            { id = 247670, price = 10000000 },
+            { id = 247734, price = 8000000 },
+            { id = 247737, price = 3000000 },
+            { id = 248663, price = 3000000 },
         },
     },
     [59698] = {
@@ -676,7 +676,7 @@ ns.Vendors = {
         zone = "Kun-Lai Summit",
         subzone = "One Keg",
         items = {
-            { id = 264349 },
+            { id = 264349, price = 10000000 },
         },
     },
     [62032] = {
@@ -684,8 +684,8 @@ ns.Vendors = {
         zone = "Shrine of Two Moons",
         faction = "Horde",
         items = {
-            { id = 247729 },
-            { id = 264362 },
+            { id = 247729, price = 3000000 },
+            { id = 264362, price = 5000000 },
         },
     },
     [62088] = {
@@ -705,8 +705,8 @@ ns.Vendors = {
         zone = "Shrine of the Seven Stars",
         faction = "Alliance",
         items = {
-            { id = 247729 },
-            { id = 264362 },
+            { id = 247729, price = 3000000 },
+            { id = 264362, price = 5000000 },
         },
     },
     [64605] = {
@@ -728,7 +728,7 @@ ns.Vendors = {
         subzone = "Bizmo's Brawlpub",
         faction = "Alliance",
         items = {
-            { id = 255840 },
+            { id = 255840, price = 80000000 },
             { id = 259071, price = 40000000 },
             { id = 263026, price = 5000000 },
         },
@@ -738,9 +738,9 @@ ns.Vendors = {
         zone = "Brawl'gar Arena",
         faction = "Horde",
         items = {
-            { id = 255840 },
-            { id = 259071 },
-            { id = 263026 },
+            { id = 255840, price = 80000000 },
+            { id = 259071, price = 40000000 },
+            { id = 263026, price = 5000000 },
         },
     },
     [76872] = {
@@ -795,8 +795,6 @@ ns.Vendors = {
         subzone = "Embaari Village",
         faction = "Alliance",
         items = {
-            { id = 245442 },
-            { id = 251544 },
             { id = 257349, price = 2000000, currencies = { { id = 824, amount = 300 } } },
         },
     },
@@ -868,17 +866,7 @@ ns.Vendors = {
         subzone = "Town Hall",
         faction = "Alliance",
         items = {
-            { id = 244321 },
-            { id = 244322 },
             { id = 244533, price = 500000 },
-            { id = 244653 },
-            { id = 245423 },
-            { id = 245431 },
-            { id = 245434 },
-            { id = 245435 },
-            { id = 245436 },
-            { id = 245444 },
-            { id = 245445 },
             { id = 251545, price = 1000000 },
         },
     },
@@ -973,7 +961,7 @@ ns.Vendors = {
         zone = "Lunarfall (Alliance Garrison)",
         faction = "Alliance",
         items = {
-            { id = 239162 },
+            { id = 239162, price = 500000, currencies = { { id = 824, amount = 100 } } },
         },
     },
     [89939] = {
@@ -1001,8 +989,8 @@ ns.Vendors = {
         name = "Leyweaver Inondra",
         zone = "Suramar",
         items = {
-            { id = 247912 },
-            { id = 247919 },
+            { id = 247912, currencies = { { id = 1155, amount = 250 } } },
+            { id = 247919, currencies = { { id = 1155, amount = 150 } } },
         },
     },
     [97140] = {
@@ -1241,7 +1229,6 @@ ns.Vendors = {
         zone = "Dreadscar Rift",
         items = {
             { id = 248940, currencies = { { id = 1220, amount = 2500 } } },
-            { id = 248941 },
             { id = 248943, currencies = { { id = 1220, amount = 1000 } } },
             { id = 248959, currencies = { { id = 1220, amount = 500 } } },
             { id = 248960, currencies = { { id = 1220, amount = 1200 } } },
@@ -1284,7 +1271,7 @@ ns.Vendors = {
         zone = "Burning Steppes",
         subzone = "Chiselgrip",
         items = {
-            { id = 256331 },
+            { id = 256331, price = 4500000 },
         },
     },
     [125346] = {
@@ -1327,8 +1314,7 @@ ns.Vendors = {
         zone = "Searing Gorge",
         subzone = "The Grim Guzzler, Blackrock Depths",
         items = {
-            { id = 245291 },
-            { id = 246779 },
+            { id = 245291, price = 25000000 },
         },
     },
     [145695] = {
@@ -1408,7 +1394,7 @@ ns.Vendors = {
         name = "Chachi the Artiste",
         zone = "Sinfall",
         items = {
-            { id = 245501 },
+            { id = 245501, currencies = { { id = 1813, amount = 300 } } },
         },
     },
     [188265] = {
@@ -1470,9 +1456,6 @@ ns.Vendors = {
         zone = "Valdrakken",
         subzone = "Behind Obsidian Enclave",
         items = {
-            { id = 246091 },
-            { id = 246863 },
-            { id = 248759 },
             { id = 249545, price = 2500000 },
             { id = 249547, price = 2500000 },
             { id = 249548, price = 2500000 },
@@ -1493,8 +1476,7 @@ ns.Vendors = {
         zone = "Thaldraszus",
         subzone = "Algeth'ar Academy",
         items = {
-            { id = 248105 },
-            { id = 248117 },
+            { id = 248117, currencies = { { id = 2657, amount = 4000 } } },
         },
     },
     [209220] = {
@@ -1502,7 +1484,7 @@ ns.Vendors = {
         zone = "Thaldraszus",
         subzone = "Eon's Fringe",
         items = {
-            { id = 248652 },
+            { id = 248105, currencies = { { id = 2003, amount = 150 } } },
         },
     },
     [210608] = {
@@ -1510,8 +1492,7 @@ ns.Vendors = {
         zone = "Dragon Isles",
         subzone = "Dreamsurge (Rotating)",
         items = {
-            { id = 255673 },
-            { id = 257352 },
+            { id = 255673, otherCost = true },
         },
     },
     [211065] = {
@@ -1533,8 +1514,8 @@ ns.Vendors = {
         zone = "Bel'ameth",
         subzone = "East",
         items = {
-            { id = 246091 },
-            { id = 248759 },
+            { id = 246091, currencies = { { id = 2003, amount = 300 } } },
+            { id = 248759, currencies = { { id = 2003, amount = 150 } } },
             { id = 256429, price = 100000, currencies = { { id = 2003, amount = 200 } } },
         },
     },
@@ -1543,13 +1524,13 @@ ns.Vendors = {
         zone = "Bel'ameth",
         subzone = "The Silver Feather Inn",
         items = {
-            { id = 245625 },
+            { id = 245625, currencies = { { id = 2003, amount = 250 } } },
             { id = 245655, currencies = { { id = 2003, amount = 10 } } },
-            { id = 245704 },
-            { id = 246089 },
-            { id = 246100 },
-            { id = 248401 },
-            { id = 251022 },
+            { id = 245704, currencies = { { id = 2003, amount = 150 } } },
+            { id = 246089, currencies = { { id = 2003, amount = 250 } } },
+            { id = 246100, currencies = { { id = 2003, amount = 300 } } },
+            { id = 248401, currencies = { { id = 2003, amount = 300 } } },
+            { id = 251022, currencies = { { id = 2003, amount = 150 } } },
         },
     },
     [216286] = {
@@ -1557,7 +1538,7 @@ ns.Vendors = {
         zone = "Bel'ameth",
         subzone = "Terrace of the Moon",
         items = {
-            { id = 257352 },
+            { id = 257352, currencies = { { id = 2003, amount = 300 } } },
         },
     },
     [216888] = {
@@ -1586,15 +1567,15 @@ ns.Vendors = {
         zone = "The City of Threads",
         subzone = "Lower City Armaments",
         items = {
-            { id = 246866, currencies = { { id = 3056, amount = 1500 } } },
+            { id = 246866, currencies = { { id = 3056, amount = 500 } } },
         },
     },
     [219217] = {
         name = "Velerd",
         zone = "Dornogal",
         items = {
-            { id = 253170, currencies = { { id = 1792, amount = 750 } } },
-            { id = 247750, currencies = { { id = 1792, amount = 2500 } } },
+            { id = 247750, currencies = { { id = 1792, amount = 1250 } } },
+            { id = 253170, currencies = { { id = 1792, amount = 350 } } },
         },
     },
     [219318] = {
@@ -1602,7 +1583,7 @@ ns.Vendors = {
         zone = "Dornogal",
         subzone = "The Forgegrounds",
         items = {
-            { id = 246867, currencies = { { id = 2815, amount = 750 } } },
+            { id = 246867, currencies = { { id = 2815, amount = 500 } } },
         },
     },
     [221390] = {
@@ -1610,7 +1591,7 @@ ns.Vendors = {
         zone = "The Ringing Deeps",
         subzone = "Gundargaz",
         items = {
-            { id = 253162, currencies = { { id = 2815, amount = 600 } } },
+            { id = 253162, currencies = { { id = 2815, amount = 250 } } },
         },
     },
     [223728] = {
@@ -1618,10 +1599,10 @@ ns.Vendors = {
         zone = "Dornogal",
         subzone = "Foundation Hall",
         items = {
-            { id = 245295, currencies = { { id = 2815, amount = 1000 } } },
-            { id = 245296, currencies = { { id = 2815, amount = 1000 } } },
-            { id = 245297, currencies = { { id = 2815, amount = 1000 } } },
-            { id = 245561, currencies = { { id = 2815, amount = 650 } } },
+            { id = 245295, currencies = { { id = 2815, amount = 250 } } },
+            { id = 245296, currencies = { { id = 2815, amount = 250 } } },
+            { id = 245297, currencies = { { id = 2815, amount = 250 } } },
+            { id = 245561, currencies = { { id = 2815, amount = 200 } } },
             { id = 253168, price = 200000 },
         },
     },
@@ -1666,7 +1647,6 @@ ns.Vendors = {
         items = {
             { id = 245313, currencies = { { id = 2815, amount = 450 } } },
             { id = 255674, currencies = { { id = 2815, amount = 450 } } },
-            { id = 258265 },
         },
     },
     [231407] = {
@@ -1703,18 +1683,18 @@ ns.Vendors = {
         zone = "Tazavesh",
         faction = "Alliance",
         items = {
-            { id = 247751, currencies = { { id = 2815, amount = 2000 } } },
-            { id = 258306, currencies = { { id = 2815, amount = 1000 } } },
-            { id = 258320, currencies = { { id = 2815, amount = 1000 } } },
-            { id = 258666, currencies = { { id = 2815, amount = 800 } } },
-            { id = 258667, currencies = { { id = 2815, amount = 800 } } },
-            { id = 258668, currencies = { { id = 2815, amount = 800 } } },
-            { id = 258669, currencies = { { id = 2815, amount = 800 } } },
-            { id = 258766, currencies = { { id = 2815, amount = 800 } } },
-            { id = 258767, currencies = { { id = 2815, amount = 800 } } },
-            { id = 258835, currencies = { { id = 2815, amount = 800 } } },
-            { id = 258836, currencies = { { id = 2815, amount = 800 } } },
-            { id = 258885, currencies = { { id = 2815, amount = 800 } } },
+            { id = 247751, currencies = { { id = 2815, amount = 500 } } },
+            { id = 258306, currencies = { { id = 2815, amount = 400 } } },
+            { id = 258320, currencies = { { id = 2815, amount = 400 } } },
+            { id = 258666, currencies = { { id = 2815, amount = 350 } } },
+            { id = 258667, currencies = { { id = 2815, amount = 350 } } },
+            { id = 258668, currencies = { { id = 2815, amount = 350 } } },
+            { id = 258669, currencies = { { id = 2815, amount = 350 } } },
+            { id = 258766, currencies = { { id = 2815, amount = 350 } } },
+            { id = 258767, currencies = { { id = 2815, amount = 350 } } },
+            { id = 258835, currencies = { { id = 2815, amount = 350 } } },
+            { id = 258836, currencies = { { id = 2815, amount = 350 } } },
+            { id = 258885, currencies = { { id = 2815, amount = 350 } } },
         },
     },
     [235314] = {
@@ -1722,7 +1702,7 @@ ns.Vendors = {
         zone = "Tazavesh",
         faction = "Alliance",
         items = {
-            { id = 260582, currencies = { { id = 2815, amount = 500 } } },
+            { id = 260582, currencies = { { id = 2815, amount = 250 } } },
         },
     },
     [235621] = {
@@ -1785,7 +1765,6 @@ ns.Vendors = {
             { id = 245402, price = 100000 },
             { id = 245403, price = 100000 },
             { id = 245404, price = 100000 },
-            { id = 264005 },
         },
     },
     [240838] = {
@@ -2056,7 +2035,7 @@ ns.Vendors = {
             { id = 247908, price = 300000, currencies = { { id = 1220, amount = 50 } } },
             { id = 247915, price = 1000000 },
             { id = 248116, price = 750000 },
-            { id = 248934 },
+            { id = 248934, price = 15000000 },
             { id = 253168, price = 200000 },
             { id = 253173, price = 200000 },
             { id = 256168, currencies = { { id = 2003, amount = 10 } } },
@@ -2068,13 +2047,13 @@ ns.Vendors = {
         subzone = "Brennadam",
         faction = "Alliance",
         items = {
-            { id = 245984 },
-            { id = 252394 },
-            { id = 252395 },
-            { id = 252396 },
-            { id = 252398 },
-            { id = 252652 },
-            { id = 252655 },
+            { id = 245984, currencies = { { id = 1560, amount = 200 } } },
+            { id = 252394, currencies = { { id = 1560, amount = 550 } } },
+            { id = 252395, currencies = { { id = 1560, amount = 200 } } },
+            { id = 252396, currencies = { { id = 1560, amount = 125 } } },
+            { id = 252398, currencies = { { id = 1560, amount = 150 } } },
+            { id = 252652, currencies = { { id = 1560, amount = 250 } } },
+            { id = 252655, currencies = { { id = 1560, amount = 150 } } },
         },
     },
     [252316] = {
@@ -2165,7 +2144,7 @@ ns.Vendors = {
             { id = 253544, currencies = { { id = 3316, amount = 150 } } },
             { id = 253598, currencies = { { id = 3316, amount = 500 } } },
             { id = 253700, currencies = { { id = 3316, amount = 250 } } },
-            { id = 269316 },
+            { id = 269316, price = 100000 },
         },
     },
     [252887] = {
@@ -2173,10 +2152,10 @@ ns.Vendors = {
         zone = "The Ringing Deeps",
         subzone = "Gundargaz",
         items = {
-            { id = 253020, currencies = { { id = 2815, amount = 500 } } },
-            { id = 253040, currencies = { { id = 2815, amount = 650 } } },
-            { id = 253162, currencies = { { id = 2815, amount = 600 } } },
-            { id = 253172, currencies = { { id = 2815, amount = 850 } } },
+            { id = 253020, currencies = { { id = 2815, amount = 250 } } },
+            { id = 253040, currencies = { { id = 2815, amount = 300 } } },
+            { id = 253162, currencies = { { id = 2815, amount = 250 } } },
+            { id = 253172, currencies = { { id = 2815, amount = 350 } } },
         },
     },
     [252901] = {
@@ -2184,9 +2163,9 @@ ns.Vendors = {
         zone = "Isle of Dorn",
         subzone = "Freywold Village",
         items = {
-            { id = 253021, currencies = { { id = 2815, amount = 400 } } },
-            { id = 253035, currencies = { { id = 2815, amount = 300 } } },
-            { id = 253166, currencies = { { id = 2815, amount = 1100 } } },
+            { id = 253021, currencies = { { id = 2815, amount = 250 } } },
+            { id = 253035, currencies = { { id = 2815, amount = 150 } } },
+            { id = 253166, currencies = { { id = 2815, amount = 400 } } },
         },
     },
     [252910] = {
@@ -2194,13 +2173,13 @@ ns.Vendors = {
         zone = "Dornogal",
         subzone = "The Forgegrounds",
         items = {
-            { id = 252756, currencies = { { id = 2815, amount = 800 } } },
-            { id = 252757, currencies = { { id = 2815, amount = 900 } } },
-            { id = 253023, currencies = { { id = 2815, amount = 800 } } },
-            { id = 253034, currencies = { { id = 2815, amount = 450 } } },
-            { id = 253037, currencies = { { id = 2815, amount = 600 } } },
-            { id = 253038, currencies = { { id = 2815, amount = 500 } } },
-            { id = 253163, currencies = { { id = 2815, amount = 900 } } },
+            { id = 252756, currencies = { { id = 2815, amount = 350 } } },
+            { id = 252757, currencies = { { id = 2815, amount = 350 } } },
+            { id = 253023, currencies = { { id = 2815, amount = 350 } } },
+            { id = 253034, currencies = { { id = 2815, amount = 250 } } },
+            { id = 253037, currencies = { { id = 2815, amount = 350 } } },
+            { id = 253038, currencies = { { id = 2815, amount = 250 } } },
+            { id = 253163, currencies = { { id = 2815, amount = 350 } } },
         },
     },
     [252915] = {
@@ -2424,7 +2403,7 @@ ns.Vendors = {
         name = "Mynde",
         zone = "Suramar",
         items = {
-            { id = 257393 },
+            { id = 257393, currencies = { { id = 1155, amount = 50 } } },
             { id = 257598, price = 100000, currencies = { { id = 1155, amount = 125 } } },
         },
     },
@@ -3458,10 +3437,10 @@ ns.Vendors = {
         name = "Gabbun",
         zone = "The Ringing Deeps",
         items = {
-            { id = 258262, price = 100000 },
-            { id = 258264, price = 100000 },
-            { id = 258265, price = 100000 },
-            { id = 258267, price = 100000 },
+            { id = 258262, currencies = { { id = 2815, amount = 200 } } },
+            { id = 258264, currencies = { { id = 2815, amount = 150 } } },
+            { id = 258265, currencies = { { id = 2815, amount = 400 } } },
+            { id = 258267, currencies = { { id = 2815, amount = 350 } } },
         },
     },
     [256784] = {
@@ -3649,12 +3628,12 @@ ns.Vendors = {
         name = "Second Mate Sluggs",
         zone = "The Coiled Isle",
         items = {
-            { id = 277921 },
-            { id = 277923 },
-            { id = 277925 },
-            { id = 277927 },
-            { id = 277929 },
-            { id = 277931 },
+            { id = 277921, currencies = { { id = 3316, amount = 500 } } },
+            { id = 277923, currencies = { { id = 3316, amount = 150 } } },
+            { id = 277925, currencies = { { id = 3316, amount = 250 } } },
+            { id = 277927, currencies = { { id = 3316, amount = 250 } } },
+            { id = 277929, currencies = { { id = 3316, amount = 500 } } },
+            { id = 277931, currencies = { { id = 3316, amount = 250 } } },
         },
     },
     [257632] = {
@@ -3809,22 +3788,22 @@ ns.Vendors = {
         faction = "Alliance",
         items = {
             { id = 260785, price = 15000000 },
-            { id = 259055 },
-            { id = 259056 },
-            { id = 259057 },
-            { id = 259058 },
-            { id = 259059 },
-            { id = 259060 },
-            { id = 259061 },
-            { id = 259062 },
-            { id = 259063 },
-            { id = 259064 },
-            { id = 259065 },
-            { id = 259066 },
-            { id = 259067 },
-            { id = 259068 },
-            { id = 259069 },
-            { id = 259070 },
+            { id = 259055, price = 10000000 },
+            { id = 259056, price = 10000000 },
+            { id = 259057, price = 10000000 },
+            { id = 259058, price = 10000000 },
+            { id = 259059, price = 2500000 },
+            { id = 259060, price = 2500000 },
+            { id = 259061, price = 2500000 },
+            { id = 259062, price = 2500000 },
+            { id = 259063, price = 2500000 },
+            { id = 259064, price = 2500000 },
+            { id = 259065, price = 2500000 },
+            { id = 259066, price = 2500000 },
+            { id = 259067, price = 2500000 },
+            { id = 259068, price = 2500000 },
+            { id = 259069, price = 2500000 },
+            { id = 259070, price = 2500000 },
         },
     },
     [261262] = {
@@ -3834,22 +3813,22 @@ ns.Vendors = {
         faction = "Horde",
         items = {
             { id = 260785, price = 14250000 },
-            { id = 259055 },
-            { id = 259056 },
-            { id = 259057 },
-            { id = 259058 },
-            { id = 259059 },
-            { id = 259060 },
-            { id = 259061 },
-            { id = 259062 },
-            { id = 259063 },
-            { id = 259064 },
-            { id = 259065 },
-            { id = 259066 },
-            { id = 259067 },
-            { id = 259068 },
-            { id = 259069 },
-            { id = 259070 },
+            { id = 259055, price = 10000000 },
+            { id = 259056, price = 10000000 },
+            { id = 259057, price = 10000000 },
+            { id = 259058, price = 10000000 },
+            { id = 259059, price = 2500000 },
+            { id = 259060, price = 2500000 },
+            { id = 259061, price = 2500000 },
+            { id = 259062, price = 2500000 },
+            { id = 259063, price = 2500000 },
+            { id = 259064, price = 2500000 },
+            { id = 259065, price = 2500000 },
+            { id = 259066, price = 2500000 },
+            { id = 259067, price = 2500000 },
+            { id = 259068, price = 2500000 },
+            { id = 259069, price = 2500000 },
+            { id = 259070, price = 2500000 },
         },
     },
     [264056] = {
@@ -3962,11 +3941,8 @@ ns.Vendors = {
         zone = "Vaults of Atal'Utek",
         items = {
             { id = 266169, currencies = { { id = 3448, amount = 750 } } },
-            { id = 281573 },
             { id = 267378, currencies = { { id = 3448, amount = 500 } } },
-            { id = 281577 },
             { id = 269637, currencies = { { id = 3448, amount = 750 } } },
-            { id = 281620 },
             { id = 271358, currencies = { { id = 3448, amount = 750 } } },
             { id = 271604, currencies = { { id = 3448, amount = 500 } } },
             { id = 271850, currencies = { { id = 3448, amount = 500 } } },
@@ -3976,6 +3952,9 @@ ns.Vendors = {
             { id = 279917, currencies = { { id = 3448, amount = 1500 } } },
             { id = 279919, currencies = { { id = 3448, amount = 1500 } } },
             { id = 279922, currencies = { { id = 3448, amount = 2500 } } },
+            { id = 281573, currencies = { { id = 3448, amount = 500 } } },
+            { id = 281577, currencies = { { id = 3448, amount = 500 } } },
+            { id = 281620, currencies = { { id = 3448, amount = 1500 } } },
         },
     },
 }

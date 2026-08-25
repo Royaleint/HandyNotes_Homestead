@@ -310,6 +310,14 @@ end
 -- summaries, while leaving ordinary zone and minimap pins with HandyNotes.
 local activeSummaryPins = {}
 
+function HNH:GetSummaryVisualSizes(uiScale)
+    uiScale = uiScale or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    local scaleCompensation = uiScale > 0 and (1 / uiScale) or 1
+    local adjustedSize = math.floor((10 * scaleCompensation) + 0.5)
+    local iconSize = math.floor((adjustedSize * 1.15) + 0.5)
+    return adjustedSize, iconSize
+end
+
 local function ClearSummaryPins()
     for index = #activeSummaryPins, 1, -1 do
         local frame = activeSummaryPins[index]
@@ -353,14 +361,17 @@ local function RenderSummaryPins()
     if not mapInfo or (mapInfo.mapType ~= Enum.UIMapType.World and mapInfo.mapType ~= Enum.UIMapType.Continent) then return end
 
     local nodes = GetProjectedNodes(mapID, UnitFactionGroup("player"), mapInfo.mapType == Enum.UIMapType.World)
+    local adjustedSize, iconSize = HNH:GetSummaryVisualSizes()
+    local fontSize = math.max(8, math.floor(adjustedSize * 0.46))
+    local textOffset = math.max(1, math.floor(adjustedSize * 0.12))
     for coord, node in next, nodes do
         local x, y = HandyNotes:getXY(coord)
         local frame = CreateFrame("Frame", nil, WorldMapFrame:GetCanvas())
-        frame:SetSize(32, 42)
+        frame:SetSize(adjustedSize, adjustedSize + fontSize + textOffset)
         frame:EnableMouse(true)
         frame.icon = frame:CreateTexture(nil, "ARTWORK")
         frame.icon:SetPoint("TOP", frame, "TOP", 0, 0)
-        frame.icon:SetSize(32, 32)
+        frame.icon:SetSize(iconSize, iconSize)
         if type(summaryIconpath) == "table" then
             frame.icon:SetTexture(summaryIconpath.icon)
             frame.icon:SetTexCoord(summaryIconpath.tCoordLeft, summaryIconpath.tCoordRight, summaryIconpath.tCoordTop, summaryIconpath.tCoordBottom)
@@ -368,8 +379,10 @@ local function RenderSummaryPins()
             frame.icon:SetTexture(summaryIconpath)
         end
         frame.count = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal", 2)
-        frame.count:SetPoint("TOP", frame.icon, "BOTTOM", 0, -1)
+        frame.count:SetPoint("TOP", frame.icon, "BOTTOM", 0, -textOffset)
         frame.count:SetText(tostring(node.vendorCount))
+        local fontPath = frame.count:GetFont()
+        frame.count:SetFont(fontPath, fontSize, "OUTLINE")
         frame.count:SetTextColor(1, 1, 1)
         frame.count:SetShadowColor(0, 0, 0, 1)
         frame.count:SetShadowOffset(1, -1)

@@ -467,7 +467,9 @@ local function run()
 
     local handler, tooltip, waypoint, selectedMap, setFaction, rectangleStats, forcedZoneOrder, _, data, setItemCached, itemLoadCallbacks = loadRuntime({}, "Alliance")
     local adjustedSize, iconSize = handler:GetSummaryVisualSizes(1)
-    check(adjustedSize == 10 and iconSize == 12, "summary badge must use Homestead-sized world icon geometry")
+    check(adjustedSize == 11 and iconSize == 13, "summary badge must use slightly enlarged Homestead-sized world icon geometry")
+    local strata, frameLevel = handler:GetSummaryFrameLayering()
+    check(strata == "MEDIUM" and frameLevel == 2024, "summary badge must render above Blizzard Area POIs")
     check(forcedZoneOrder[1] == 102 and forcedZoneOrder[2] == 101, "collision fixture must enumerate zones out of sorted order")
     local zoneNodes = collect(handler, 101, false)
     local zoneVendor = zoneNodes[10001000]

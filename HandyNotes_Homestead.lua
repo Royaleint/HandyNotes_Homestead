@@ -313,9 +313,13 @@ local activeSummaryPins = {}
 function HNH:GetSummaryVisualSizes(uiScale)
     uiScale = uiScale or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
     local scaleCompensation = uiScale > 0 and (1 / uiScale) or 1
-    local adjustedSize = math.floor((10 * scaleCompensation) + 0.5)
+    local adjustedSize = math.floor((11 * scaleCompensation) + 0.5)
     local iconSize = math.floor((adjustedSize * 1.15) + 0.5)
     return adjustedSize, iconSize
+end
+
+function HNH:GetSummaryFrameLayering()
+    return "MEDIUM", 2024
 end
 
 local function ClearSummaryPins()
@@ -367,6 +371,9 @@ local function RenderSummaryPins()
     for coord, node in next, nodes do
         local x, y = HandyNotes:getXY(coord)
         local frame = CreateFrame("Frame", nil, WorldMapFrame:GetCanvas())
+        local strata, frameLevel = HNH:GetSummaryFrameLayering()
+        frame:SetFrameStrata(strata)
+        frame:SetFrameLevel(frameLevel)
         frame:SetSize(adjustedSize, adjustedSize + fontSize + textOffset)
         frame:EnableMouse(true)
         frame.icon = frame:CreateTexture(nil, "ARTWORK")

@@ -192,33 +192,84 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
     end
     table.sort(zoneMapIDs)
 
-    for _, zoneMapID in ipairs(zoneMapIDs) do
-        local vendors = {}
-        for _, npcID in next, ns.Nodes[zoneMapID] do
-            local vendor = ns.Vendors[npcID]
-            if vendor and (not vendor.faction or vendor.faction == faction) then
-                vendors[npcID] = true
+    if isWorld then
+        local continentVendors = {}
+        for _, zoneMapID in ipairs(zoneMapIDs) do
+            local continentMapID = ZoneContinent(zoneMapID)
+            if continentMapID then
+                local vendors = continentVendors[continentMapID]
+                if not vendors then
+                    vendors = {}
+                    continentVendors[continentMapID] = vendors
+                end
+                for _, npcID in next, ns.Nodes[zoneMapID] do
+                    local vendor = ns.Vendors[npcID]
+                    if vendor and (not vendor.faction or vendor.faction == faction) then
+                        vendors[npcID] = true
+                    end
+                end
             end
         end
-        local vendorCount = 0
-        for _ in next, vendors do
-            vendorCount = vendorCount + 1
-        end
 
-        if vendorCount > 0 then
-            local x, y, projectionReason = ProjectZoneCenterToMap(zoneMapID, viewMapID)
-            if not x or not y then
-                failures[zoneMapID] = projectionReason
-            else
-                local coord = NudgeSummaryCoordinate(nodes, x, y)
-                if not coord then
-                    failures[zoneMapID] = "Summary coordinate is outside map bounds"
+        local continentMapIDs = {}
+        for continentMapID in next, continentVendors do
+            continentMapIDs[#continentMapIDs + 1] = continentMapID
+        end
+        table.sort(continentMapIDs)
+
+        for _, continentMapID in ipairs(continentMapIDs) do
+            local vendors = continentVendors[continentMapID]
+            local vendorCount = 0
+            for _ in next, vendors do
+                vendorCount = vendorCount + 1
+            end
+            if vendorCount > 0 then
+                local x, y, projectionReason = ProjectZoneCenterToMap(continentMapID, viewMapID)
+                if not x or not y then
+                    failures[continentMapID] = projectionReason
                 else
-                    nodes[coord] = {
-                        kind = "zoneSummary",
-                        zoneMapID = zoneMapID,
-                        vendorCount = vendorCount,
-                    }
+                    local coord = NudgeSummaryCoordinate(nodes, x, y)
+                    if not coord then
+                        failures[continentMapID] = "Summary coordinate is outside map bounds"
+                    else
+                        nodes[coord] = {
+                            kind = "continentSummary",
+                            mapID = continentMapID,
+                            vendorCount = vendorCount,
+                        }
+                    end
+                end
+            end
+        end
+    else
+        for _, zoneMapID in ipairs(zoneMapIDs) do
+            local vendors = {}
+            for _, npcID in next, ns.Nodes[zoneMapID] do
+                local vendor = ns.Vendors[npcID]
+                if vendor and (not vendor.faction or vendor.faction == faction) then
+                    vendors[npcID] = true
+                end
+            end
+            local vendorCount = 0
+            for _ in next, vendors do
+                vendorCount = vendorCount + 1
+            end
+
+            if vendorCount > 0 then
+                local x, y, projectionReason = ProjectZoneCenterToMap(zoneMapID, viewMapID)
+                if not x or not y then
+                    failures[zoneMapID] = projectionReason
+                else
+                    local coord = NudgeSummaryCoordinate(nodes, x, y)
+                    if not coord then
+                        failures[zoneMapID] = "Summary coordinate is outside map bounds"
+                    else
+                        nodes[coord] = {
+                            kind = "zoneSummary",
+                            zoneMapID = zoneMapID,
+                            vendorCount = vendorCount,
+                        }
+                    end
                 end
             end
         end
@@ -249,7 +300,7 @@ do
         local coord, node = next(nodes, prestate)
         while coord do
             -- luacheck: ignore 113
-            if type(node) == "table" and node.kind == "zoneSummary" then
+            if type(node) == "table" and (node.kind == "zoneSummary" or node.kind == "continentSummary") then
                 return coord, nil, summaryIconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
             end
             local vendor = ns.Vendors[node]
@@ -415,12 +466,14 @@ function HNH:OnEnter(uiMapID, coord)
     end
 
     -- luacheck: ignore 113
-    if type(node) == "table" and node.kind == "zoneSummary" then
+    if type(node) == "table" and (node.kind == "zoneSummary" or node.kind == "continentSummary") then
         currentHover = nil
-        local zone = C_Map.GetMapInfo(node.zoneMapID)
-        tooltip:SetText(zone and zone.name or "Unknown zone")
+        local summaryMapID = node.mapID or node.zoneMapID
+        local summaryMap = C_Map.GetMapInfo(summaryMapID)
+        local summaryLabel = node.kind == "continentSummary" and "continent" or "zone"
+        tooltip:SetText(summaryMap and summaryMap.name or ("Unknown " .. summaryLabel))
         tooltip:AddLine(node.vendorCount .. " vendors")
-        tooltip:AddLine("Click to view zone")
+        tooltip:AddLine("Click to view " .. summaryLabel)
         tooltip:Show()
         return
     end
@@ -464,10 +517,10 @@ function HNH:OnClick(button, down, uiMapID, coord)
     if button ~= "LeftButton" or down then return end
     local node = NodeAt(uiMapID, coord, UnitFactionGroup("player"))
     -- luacheck: ignore 113
-    if type(node) == "table" and node.kind == "zoneSummary" then
+    if type(node) == "table" and (node.kind == "zoneSummary" or node.kind == "continentSummary") then
         -- luacheck: ignore 113
         if WorldMapFrame and WorldMapFrame.SetMapID then
-            WorldMapFrame:SetMapID(node.zoneMapID)
+            WorldMapFrame:SetMapID(node.mapID or node.zoneMapID)
         end
         return
     end

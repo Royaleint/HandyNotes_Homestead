@@ -148,6 +148,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     _G.UnitFactionGroup = function() return factionState.value end
     _G.CreateFrame = function()
         frame = { scripts = {} }
+        function frame:GetCenter() return 0 end
         function frame:RegisterEvent() end
         function frame:UnregisterEvent() end
         function frame:SetScript(name, callback) self.scripts[name] = callback end
@@ -370,26 +371,38 @@ end
 
 local function runWorldProjectionRegression()
     local data = {
-        Nodes = { [101] = { [10001000] = 1 } },
-        Vendors = { [1] = { name = "World-map vendor", items = {} } },
+        Nodes = {
+            [101] = { [10001000] = 1 },
+            [102] = { [20002000] = 2 },
+        },
+        Vendors = {
+            [1] = { name = "World-map vendor one", items = {} },
+            [2] = { name = "World-map vendor two", items = {} },
+        },
     }
     local fixture = {
         [800] = { mapID = 800, mapType = 1, name = "Fixture world" },
         [900] = { mapID = 900, mapType = 2, parentMapID = 800, name = "Fixture continent" },
         [101] = { mapID = 101, mapType = 3, parentMapID = 900, name = "World-map zone" },
+        [102] = { mapID = 102, mapType = 3, parentMapID = 900, name = "Second world-map zone" },
     }
     local function adjacentRectangles(sourceMapID, targetMapID)
-        if sourceMapID == 101 and targetMapID == 900 then
-            return 0.2, 0.4, 0.3, 0.5
-        end
         if sourceMapID == 900 and targetMapID == 800 then
             return 0.1, 0.3, 0.2, 0.4
         end
         return nil
     end
-    local handler = loadRuntime({}, "Alliance", nil, data, fixture, adjacentRectangles)
+    local handler, tooltip, _, selectedMap = loadRuntime({}, "Alliance", nil, data, fixture, adjacentRectangles)
     local summaries = collect(handler, 800, false)
-    checkSummaryAt(summaries, 16002800, 101, 1)
+    check(countNodes(summaries) == 1, "world map must emit one consolidated summary per continent")
+    local worldSummary = summaries[20003000] and summaries[20003000].record
+    check(worldSummary and worldSummary.kind == "continentSummary", "world map must emit a continentSummary record")
+    check(worldSummary.mapID == 900 and worldSummary.vendorCount == 2, "world continent summary must identify the continent and aggregate its visible vendors")
+    local pin = { GetCenter = function() return 0 end }
+    handler.OnEnter(pin, 800, 20003000)
+    check(tooltip.lines[1] == "Fixture continent" and tooltip.lines[2] == "2 vendors" and tooltip.lines[3] == "Click to view continent", "world continent summary tooltip must identify the continent and aggregate count")
+    handler.OnClick(pin, "LeftButton", false, 800, 20003000)
+    check(selectedMap() == 900, "world continent summary click must open the continent map")
 end
 
 local function run()

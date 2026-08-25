@@ -73,12 +73,35 @@ local continentNodes = {}
 local worldNodes = {}
 local summaryIconpath = FALLBACK_ICON
 
+-- Keep HNH's summary geography aligned with Homestead's established map rules.
+-- These are display rules only; the generated vendor data remains unchanged.
+local excludedContinents = { [572] = true, [1550] = true }
+local continentMergesInto = { [905] = 619 }
+local continentOverlaysOnParent = { [2537] = 13 }
+local overlayZoneExclusions = {
+    [2537] = { [2405] = true, [15958] = true, [2444] = true, [2694] = true, [2576] = true, [2413] = true },
+}
+
+local function DisplayContinent(continentMapID)
+    return continentMergesInto[continentMapID] or continentOverlaysOnParent[continentMapID] or continentMapID
+end
+
 local function ZoneContinent(zoneMapID)
     local info = C_Map.GetMapInfo(zoneMapID)
     while info and info.mapType and info.mapType > Enum.UIMapType.Continent do
         info = C_Map.GetMapInfo(info.parentMapID)
     end
     return (info and info.mapType == Enum.UIMapType.Continent) and info.mapID or nil
+end
+
+local function ZoneBelongsToView(zoneMapID, viewMapID)
+    local continentMapID = ZoneContinent(zoneMapID)
+    if not continentMapID then return false end
+    if DisplayContinent(continentMapID) == viewMapID then
+        return not (overlayZoneExclusions[continentMapID] and overlayZoneExclusions[continentMapID][zoneMapID])
+    end
+    return continentOverlaysOnParent[continentMapID] == viewMapID
+        and not (overlayZoneExclusions[continentMapID] and overlayZoneExclusions[continentMapID][zoneMapID])
 end
 
 local function ProjectZoneCenterToMap(zoneMapID, continentMapID)
@@ -182,9 +205,10 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
         local info = C_Map.GetMapInfo(zoneMapID)
         local belongsToView
         if isWorld then
-            belongsToView = ZoneContinent(zoneMapID) ~= nil
+            local continentMapID = ZoneContinent(zoneMapID)
+            belongsToView = continentMapID ~= nil and not excludedContinents[continentMapID]
         else
-            belongsToView = ZoneContinent(zoneMapID) == viewMapID
+            belongsToView = ZoneBelongsToView(zoneMapID, viewMapID)
         end
         if info and info.mapType and info.mapType > Enum.UIMapType.Continent and belongsToView then
             zoneMapIDs[#zoneMapIDs + 1] = zoneMapID
@@ -195,7 +219,7 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
     if isWorld then
         local continentVendors = {}
         for _, zoneMapID in ipairs(zoneMapIDs) do
-            local continentMapID = ZoneContinent(zoneMapID)
+            local continentMapID = DisplayContinent(ZoneContinent(zoneMapID))
             if continentMapID then
                 local vendors = continentVendors[continentMapID]
                 if not vendors then
@@ -277,6 +301,102 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
     return nodes
 end
 
+-------------------------------------------------------------------------------
+-- Counted world/continent badges
+-------------------------------------------------------------------------------
+
+-- HandyNotes owns its pin frames and exposes no supported child-frame hook for
+-- a count label. Use the same plain-frame/canvas approach as Homestead for
+-- summaries, while leaving ordinary zone and minimap pins with HandyNotes.
+local activeSummaryPins = {}
+
+local function ClearSummaryPins()
+    for index = #activeSummaryPins, 1, -1 do
+        local frame = activeSummaryPins[index]
+        frame:Hide()
+        frame:ClearAllPoints()
+        frame:SetParent(UIParent)
+        activeSummaryPins[index] = nil
+    end
+end
+
+local function PositionSummaryPin(frame, x, y)
+    local canvas = WorldMapFrame and WorldMapFrame.GetCanvas and WorldMapFrame:GetCanvas()
+    if not canvas then return false end
+    local width, height = canvas:GetWidth(), canvas:GetHeight()
+    if not width or not height or width <= 0 or height <= 0 then return false end
+    local canvasScale = canvas:GetEffectiveScale() or 1
+    local uiScale = UIParent:GetEffectiveScale() or 1
+    local scale = canvasScale > 0 and uiScale / canvasScale or 1
+    frame:SetScale(scale)
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", canvas, "TOPLEFT", (width * x) / scale, -(height * y) / scale)
+    frame:Show()
+    return true
+end
+
+function HNH:ShowSummaryTooltip(frame, node)
+    local mapID = node.mapID or node.zoneMapID
+    local mapInfo = C_Map.GetMapInfo(mapID)
+    GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
+    GameTooltip:SetText(mapInfo and mapInfo.name or "Unknown map")
+    GameTooltip:AddLine(tostring(node.vendorCount) .. " vendors")
+    GameTooltip:AddLine("Click to view " .. (node.kind == "continentSummary" and "continent" or "zone"))
+    GameTooltip:Show()
+end
+
+local function RenderSummaryPins()
+    ClearSummaryPins()
+    if not WorldMapFrame or not WorldMapFrame.IsShown or not WorldMapFrame:IsShown() then return end
+    local mapID = WorldMapFrame.GetMapID and WorldMapFrame:GetMapID()
+    local mapInfo = mapID and C_Map.GetMapInfo(mapID)
+    if not mapInfo or (mapInfo.mapType ~= Enum.UIMapType.World and mapInfo.mapType ~= Enum.UIMapType.Continent) then return end
+
+    local nodes = GetProjectedNodes(mapID, UnitFactionGroup("player"), mapInfo.mapType == Enum.UIMapType.World)
+    for coord, node in next, nodes do
+        local x, y = HandyNotes:getXY(coord)
+        local frame = CreateFrame("Frame", nil, WorldMapFrame:GetCanvas())
+        frame:SetSize(32, 42)
+        frame:EnableMouse(true)
+        frame.icon = frame:CreateTexture(nil, "ARTWORK")
+        frame.icon:SetPoint("TOP", frame, "TOP", 0, 0)
+        frame.icon:SetSize(32, 32)
+        if type(summaryIconpath) == "table" then
+            frame.icon:SetTexture(summaryIconpath.icon)
+            frame.icon:SetTexCoord(summaryIconpath.tCoordLeft, summaryIconpath.tCoordRight, summaryIconpath.tCoordTop, summaryIconpath.tCoordBottom)
+        else
+            frame.icon:SetTexture(summaryIconpath)
+        end
+        frame.count = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal", 2)
+        frame.count:SetPoint("TOP", frame.icon, "BOTTOM", 0, -1)
+        frame.count:SetText(tostring(node.vendorCount))
+        frame.count:SetTextColor(1, 1, 1)
+        frame.count:SetShadowColor(0, 0, 0, 1)
+        frame.count:SetShadowOffset(1, -1)
+        frame:SetScript("OnEnter", function(self) HNH:ShowSummaryTooltip(self, node) end)
+        frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        frame:SetScript("OnMouseUp", function(_, button)
+            if button == "LeftButton" and WorldMapFrame.SetMapID then
+                WorldMapFrame:SetMapID(node.mapID or node.zoneMapID)
+            end
+        end)
+        activeSummaryPins[#activeSummaryPins + 1] = frame
+        PositionSummaryPin(frame, x, y)
+    end
+end
+
+local summaryMapProvider
+
+local function RegisterSummaryMapProvider()
+    if not WorldMapFrame or not WorldMapFrame.AddDataProvider or not CreateFromMixins or not MapCanvasDataProviderMixin then return end
+    if summaryMapProvider then return end
+    summaryMapProvider = CreateFromMixins(MapCanvasDataProviderMixin)
+    function summaryMapProvider:OnMapChanged() RenderSummaryPins() end
+    function summaryMapProvider:OnCanvasSizeChanged() RenderSummaryPins() end
+    function summaryMapProvider:OnCanvasScaleChanged() RenderSummaryPins() end
+    WorldMapFrame:AddDataProvider(summaryMapProvider)
+end
+
 -- Node lookup shared by tooltip and click handlers: zone nodes come from the
 -- generated data, continent nodes from the projected cache.
 local function NodeAt(uiMapID, coord, faction)
@@ -321,8 +441,10 @@ do
         if not minimap then
             local info = C_Map.GetMapInfo(uiMapID)
             if info and info.mapType == Enum.UIMapType.Continent then
+                if WorldMapFrame and WorldMapFrame.GetCanvas then return iter, nil, nil end
                 nodes = GetProjectedNodes(uiMapID, playerFaction, false)
             elseif info and info.mapType == Enum.UIMapType.World then
+                if WorldMapFrame and WorldMapFrame.GetCanvas then return iter, nil, nil end
                 nodes = GetProjectedNodes(uiMapID, playerFaction, true)
             end
         end
@@ -600,6 +722,8 @@ frame:SetScript("OnEvent", function(self)
     iconpath = ResolveIcon()
     summaryIconpath = iconpath
     LibStub("AceEvent-3.0"):Embed(HNH)
+
+    RegisterSummaryMapProvider()
 
     HandyNotes:RegisterPluginDB("Homestead", HNH, options)
 

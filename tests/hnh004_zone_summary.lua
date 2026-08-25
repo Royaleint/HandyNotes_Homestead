@@ -405,6 +405,55 @@ local function runWorldProjectionRegression()
     check(selectedMap() == 900, "world continent summary click must open the continent map")
 end
 
+local function runHomesteadGeographyRegression()
+    local data = {
+        Nodes = {
+            [101] = { [10001000] = 1 },
+            [102] = { [20002000] = 2 },
+            [103] = { [30003000] = 3 },
+        },
+        Vendors = {
+            [1] = { name = "Broken Isles vendor", items = {} },
+            [2] = { name = "Argus vendor", items = {} },
+            [3] = { name = "Quel'Thalas vendor", items = {} },
+        },
+    }
+    local fixture = {
+        [800] = { mapID = 800, mapType = 1, name = "Fixture world" },
+        [619] = { mapID = 619, mapType = 2, parentMapID = 800, name = "Broken Isles" },
+        [905] = { mapID = 905, mapType = 2, parentMapID = 800, name = "Argus" },
+        [13] = { mapID = 13, mapType = 2, parentMapID = 800, name = "Eastern Kingdoms" },
+        [2537] = { mapID = 2537, mapType = 2, parentMapID = 13, name = "Quel'Thalas" },
+        [101] = { mapID = 101, mapType = 3, parentMapID = 619, name = "Broken Isles zone" },
+        [102] = { mapID = 102, mapType = 3, parentMapID = 905, name = "Argus zone" },
+        [103] = { mapID = 103, mapType = 3, parentMapID = 2537, name = "Quel'Thalas zone" },
+    }
+    local function adjacentRectangles(sourceMapID, targetMapID)
+        if targetMapID == 800 and sourceMapID == 619 then return 0.1, 0.3, 0.2, 0.4 end
+        if targetMapID == 800 and sourceMapID == 13 then return 0.5, 0.7, 0.6, 0.8 end
+        if targetMapID == 619 and sourceMapID == 101 then return 0.1, 0.3, 0.2, 0.4 end
+        if targetMapID == 13 and sourceMapID == 2537 then return 0.1, 0.3, 0.2, 0.4 end
+        if targetMapID == 2537 and sourceMapID == 103 then return 0.5, 0.7, 0.6, 0.8 end
+    end
+    local handler = loadRuntime({}, "Alliance", nil, data, fixture, adjacentRectangles)
+    local world = collect(handler, 800, false)
+    check(countNodes(world) == 2, "world geography must consolidate Argus into Broken Isles and Quel'Thalas into Eastern Kingdoms")
+    check(world[20003000] and world[20003000].record.vendorCount == 2, "world Broken Isles summary must include Argus vendors")
+    local easternWorldSummary
+    for _, node in pairs(world) do
+        if node.record.mapID == 13 then easternWorldSummary = node.record end
+    end
+    local worldMapIDs = {}
+    for _, node in pairs(world) do worldMapIDs[#worldMapIDs + 1] = tostring(node.record.mapID) end
+    check(easternWorldSummary and easternWorldSummary.vendorCount == 1, "world Eastern Kingdoms summary must include Quel'Thalas vendors: " .. table.concat(worldMapIDs, ","))
+    local easternKingdoms = collect(handler, 13, false)
+    local easternZoneSummary
+    for _, node in pairs(easternKingdoms) do
+        if node.record.zoneMapID == 103 then easternZoneSummary = node.record end
+    end
+    check(countNodes(easternKingdoms) == 1 and easternZoneSummary, "Eastern Kingdoms view must show the Quel'Thalas overlay zone")
+end
+
 local function run()
     local standalone = { loadRuntime({}, "Alliance") }
     check(standalone[1], "standalone registration did not capture a plugin handler")
@@ -497,6 +546,7 @@ local function run()
     runNestedProjectionRegression()
     runHBDProjectionFallback()
     runWorldProjectionRegression()
+    runHomesteadGeographyRegression()
 end
 
 local ok, err = xpcall(run, debug.traceback)

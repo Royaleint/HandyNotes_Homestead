@@ -18,7 +18,7 @@ globals = {
 -- with the code, don't pre-seed it.
 read_globals = {
     -- Lua builtins
-    "next", "ipairs", "math", "table",
+    "next", "ipairs", "math", "table", "type", "tostring",
 
     -- Libraries
     "LibStub",
@@ -38,4 +38,7 @@ read_globals = {
     "C_Map",
     "C_SuperTrack",
     "C_Texture",
+    "WorldMapFrame",
+    "CreateFromMixins",
+    "MapCanvasDataProviderMixin",
 }

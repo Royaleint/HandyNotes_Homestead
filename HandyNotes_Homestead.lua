@@ -58,7 +58,7 @@ end
 -- vendor nodes (zarillion handynotes-plugins core/nodes.lua Vendor class).
 -- Minimap pins at 12px match Homestead's minimap size and stay untouched.
 local WORLD_PIN_SCALE = 1.35
-local MINIMAP_PIN_SCALE = 1.0
+local MINIMAP_PIN_SCALE = 1.15
 
 -------------------------------------------------------------------------------
 -- Continent-level nodes
@@ -82,6 +82,12 @@ local overlayZoneExclusions = {
     [2537] = {
         [2405] = true, [15958] = true, [2444] = true, [2694] = true, [2576] = true, [2413] = true,
         [2599] = true, -- Val is native to the Quel'Thalas map, not the EK overlay.
+    },
+}
+local continentZoneGroups = {
+    [2537] = {
+        { mapID = 2405, members = { 2405, 2599, 2444, 15958 } },
+        { mapID = 2694, members = { 2694, 2576, 2413 } },
     },
 }
 
@@ -272,7 +278,43 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
             end
         end
     else
+        local groupedZoneIDs = {}
+        local groups = continentZoneGroups[viewMapID]
+        if groups then
+            for _, group in ipairs(groups) do
+                local vendors = {}
+                for _, zoneMapID in ipairs(group.members) do
+                    groupedZoneIDs[zoneMapID] = true
+                    for _, npcID in next, ns.Nodes[zoneMapID] or {} do
+                        local vendor = ns.Vendors[npcID]
+                        if vendor and (not vendor.faction or vendor.faction == faction) then
+                            vendors[npcID] = true
+                        end
+                    end
+                end
+                local vendorCount = 0
+                for _ in next, vendors do vendorCount = vendorCount + 1 end
+                if vendorCount > 0 then
+                    local x, y, projectionReason = ProjectZoneCenterToMap(group.mapID, viewMapID)
+                    if not x or not y then
+                        failures[group.mapID] = projectionReason
+                    else
+                        local coord = NudgeSummaryCoordinate(nodes, x, y)
+                        if not coord then
+                            failures[group.mapID] = "Summary coordinate is outside map bounds"
+                        else
+                            nodes[coord] = {
+                                kind = "zoneSummary",
+                                zoneMapID = group.mapID,
+                                vendorCount = vendorCount,
+                            }
+                        end
+                    end
+                end
+            end
+        end
         for _, zoneMapID in ipairs(zoneMapIDs) do
+            if not groupedZoneIDs[zoneMapID] then
             local vendors = {}
             for _, npcID in next, ns.Nodes[zoneMapID] do
                 local vendor = ns.Vendors[npcID]
@@ -302,6 +344,7 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
                     end
                 end
             end
+            end
         end
     end
     return nodes
@@ -326,6 +369,10 @@ end
 
 function HNH:GetSummaryFrameLayering()
     return "MEDIUM", 2024
+end
+
+function HNH:GetMinimapPinScale()
+    return MINIMAP_PIN_SCALE
 end
 
 local function ClearSummaryPins()

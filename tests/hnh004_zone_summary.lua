@@ -413,6 +413,9 @@ local function runHomesteadGeographyRegression()
             [103] = { [30003000] = 3 },
             [2405] = { [40004000] = 4 },
             [2599] = { [50005000] = 5 },
+            [2444] = { [60006000] = 6 },
+            [2694] = { [70007000] = 7 },
+            [2576] = { [80008000] = 8 },
         },
         Vendors = {
             [1] = { name = "Broken Isles vendor", items = {} },
@@ -420,6 +423,9 @@ local function runHomesteadGeographyRegression()
             [3] = { name = "Quel'Thalas vendor", items = {} },
             [4] = { name = "Voidstorm vendor", items = {} },
             [5] = { name = "Val vendor", items = {} },
+            [6] = { name = "Slayer's Rise vendor", items = {} },
+            [7] = { name = "Harandar vendor", items = {} },
+            [8] = { name = "The Den vendor", items = {} },
         },
     }
     local fixture = {
@@ -433,6 +439,9 @@ local function runHomesteadGeographyRegression()
         [103] = { mapID = 103, mapType = 3, parentMapID = 2537, name = "Quel'Thalas zone" },
         [2405] = { mapID = 2405, mapType = 3, parentMapID = 2537, name = "Voidstorm" },
         [2599] = { mapID = 2599, mapType = 3, parentMapID = 2537, name = "Val" },
+        [2444] = { mapID = 2444, mapType = 3, parentMapID = 2537, name = "Slayer's Rise" },
+        [2694] = { mapID = 2694, mapType = 3, parentMapID = 2537, name = "Harandar" },
+        [2576] = { mapID = 2576, mapType = 3, parentMapID = 2537, name = "The Den" },
     }
     local function adjacentRectangles(sourceMapID, targetMapID)
         if targetMapID == 800 and sourceMapID == 619 then return 0.1, 0.3, 0.2, 0.4 end
@@ -442,6 +451,9 @@ local function runHomesteadGeographyRegression()
         if targetMapID == 2537 and sourceMapID == 103 then return 0.5, 0.7, 0.6, 0.8 end
         if targetMapID == 2537 and sourceMapID == 2405 then return 0.2, 0.4, 0.3, 0.5 end
         if targetMapID == 2537 and sourceMapID == 2599 then return 0.6, 0.8, 0.7, 0.9 end
+        if targetMapID == 2537 and sourceMapID == 2444 then return 0.3, 0.5, 0.4, 0.6 end
+        if targetMapID == 2537 and sourceMapID == 2694 then return 0.7, 0.9, 0.2, 0.4 end
+        if targetMapID == 2537 and sourceMapID == 2576 then return 0.8, 0.9, 0.3, 0.5 end
     end
     local handler = loadRuntime({}, "Alliance", nil, data, fixture, adjacentRectangles)
     local world = collect(handler, 800, false)
@@ -453,7 +465,7 @@ local function runHomesteadGeographyRegression()
     end
     local worldMapIDs = {}
     for _, node in pairs(world) do worldMapIDs[#worldMapIDs + 1] = tostring(node.record.mapID) end
-    check(easternWorldSummary and easternWorldSummary.vendorCount == 3, "world Eastern Kingdoms summary must include Quel'Thalas vendors: " .. table.concat(worldMapIDs, ","))
+    check(easternWorldSummary and easternWorldSummary.vendorCount == 6, "world Eastern Kingdoms summary must include Quel'Thalas vendors: " .. table.concat(worldMapIDs, ","))
     local easternKingdoms = collect(handler, 13, false)
     local easternZoneSummary
     for _, node in pairs(easternKingdoms) do
@@ -466,11 +478,14 @@ local function runHomesteadGeographyRegression()
         if node.record.zoneMapID == 2405 then voidstormSummary = node.record end
     end
     check(voidstormSummary, "Quel'Thalas map must retain its native Voidstorm zone summary")
-    local valSummary
+    check(countNodes(quelThalas) == 3, "Quel'Thalas map must consolidate the two Midnight sub-zone clusters")
+    local voidstormCount = 0
+    local harandarCount = 0
     for _, node in pairs(quelThalas) do
-        if node.record.zoneMapID == 2599 then valSummary = node.record end
+        if node.record.zoneMapID == 2405 then voidstormCount = node.record.vendorCount end
+        if node.record.zoneMapID == 2694 then harandarCount = node.record.vendorCount end
     end
-    check(valSummary, "Quel'Thalas map must retain its native Val zone summary")
+    check(voidstormCount == 3 and harandarCount == 2, "Quel'Thalas cluster badges must aggregate Voidstorm/Val/Slayer's Rise and Harandar/The Den")
 end
 
 local function run()
@@ -489,6 +504,7 @@ local function run()
     check(adjustedSize == 11 and iconSize == 13, "summary badge must use slightly enlarged Homestead-sized world icon geometry")
     local strata, frameLevel = handler:GetSummaryFrameLayering()
     check(strata == "MEDIUM" and frameLevel == 2024, "summary badge must render above Blizzard Area POIs")
+    check(handler:GetMinimapPinScale() == 1.15, "minimap vendor pins must use the enlarged scale")
     check(forcedZoneOrder[1] == 102 and forcedZoneOrder[2] == 101, "collision fixture must enumerate zones out of sorted order")
     local zoneNodes = collect(handler, 101, false)
     local zoneVendor = zoneNodes[10001000]

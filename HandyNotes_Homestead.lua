@@ -72,6 +72,8 @@ local HBD
 local continentNodes = {}
 local worldNodes = {}
 local summaryIconpath = FALLBACK_ICON
+local professionVendorRequirements = { [256026] = 182 } -- Irodalmin requires Herbalism.
+local professionVisibilityKey
 
 -- Keep HNH's summary geography aligned with Homestead's established map rules.
 -- These are display rules only; the generated vendor data remains unchanged.
@@ -94,6 +96,34 @@ local continentZoneGroups = {
 
 local function DisplayContinent(continentMapID)
     return continentMergesInto[continentMapID] or continentOverlaysOnParent[continentMapID] or continentMapID
+end
+
+local function PlayerHasSkillLine(skillLineID)
+    if not GetProfessions or not GetProfessionInfo then return false end
+    local profession1, profession2, profession3, profession4, profession5 = GetProfessions()
+    local professionIndices = { profession1, profession2, profession3, profession4, profession5 }
+    for index = 1, 5 do
+        local professionIndex = professionIndices[index]
+        if professionIndex then
+            local _, _, _, _, _, _, currentSkillLineID = GetProfessionInfo(professionIndex)
+            if currentSkillLineID == skillLineID then return true end
+        end
+    end
+    return false
+end
+
+function HNH:IsProfessionVendorVisible(npcID)
+    local requiredSkillLineID = professionVendorRequirements[npcID]
+    return not requiredSkillLineID or PlayerHasSkillLine(requiredSkillLineID)
+end
+
+local function RefreshProfessionVisibilityCache()
+    local nextKey = PlayerHasSkillLine(182) and "herbalism" or "no_herbalism"
+    if nextKey == professionVisibilityKey then return end
+    professionVisibilityKey = nextKey
+    continentNodes = {}
+    worldNodes = {}
+    ns.ZoneSummaryProjectionFailures = nil
 end
 
 local function ZoneContinent(zoneMapID)
@@ -192,6 +222,7 @@ local function NudgeSummaryCoordinate(nodes, x, y)
 end
 
 local function GetProjectedNodes(viewMapID, faction, isWorld)
+    RefreshProfessionVisibilityCache()
     local factionKey = faction or "Neutral"
     local viewCache = isWorld and worldNodes or continentNodes
     local cachedNodes = viewCache[viewMapID]
@@ -241,7 +272,7 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
                 end
                 for _, npcID in next, ns.Nodes[zoneMapID] do
                     local vendor = ns.Vendors[npcID]
-                    if vendor and (not vendor.faction or vendor.faction == faction) then
+                    if vendor and HNH:IsProfessionVendorVisible(npcID) and (not vendor.faction or vendor.faction == faction) then
                         vendors[npcID] = true
                     end
                 end
@@ -288,7 +319,7 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
                     groupedZoneIDs[zoneMapID] = true
                     for _, npcID in next, ns.Nodes[zoneMapID] or {} do
                         local vendor = ns.Vendors[npcID]
-                        if vendor and (not vendor.faction or vendor.faction == faction) then
+                        if vendor and HNH:IsProfessionVendorVisible(npcID) and (not vendor.faction or vendor.faction == faction) then
                             vendors[npcID] = true
                         end
                     end
@@ -324,7 +355,7 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
             local vendors = {}
             for _, npcID in next, ns.Nodes[zoneMapID] do
                 local vendor = ns.Vendors[npcID]
-                if vendor and (not vendor.faction or vendor.faction == faction) then
+                if vendor and HNH:IsProfessionVendorVisible(npcID) and (not vendor.faction or vendor.faction == faction) then
                     vendors[npcID] = true
                 end
             end
@@ -479,6 +510,7 @@ end
 -- Node lookup shared by tooltip and click handlers: zone nodes come from the
 -- generated data, continent nodes from the projected cache.
 local function NodeAt(uiMapID, coord, faction)
+    RefreshProfessionVisibilityCache()
     local info = C_Map.GetMapInfo(uiMapID)
     if info and (info.mapType == Enum.UIMapType.Continent or info.mapType == Enum.UIMapType.World) then
         local viewCache = info.mapType == Enum.UIMapType.World and worldNodes or continentNodes
@@ -505,7 +537,7 @@ do
             local vendor = ns.Vendors[node]
             -- faction is pre-baked by the exporter: present only when the
             -- vendor is effectively Alliance/Horde; absent = show to all.
-            if vendor and (not vendor.faction or vendor.faction == playerFaction) then
+            if vendor and HNH:IsProfessionVendorVisible(node) and (not vendor.faction or vendor.faction == playerFaction) then
                 return coord, nil, iconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
             end
             coord, node = next(nodes, coord)
@@ -680,7 +712,7 @@ function HNH:OnEnter(uiMapID, coord)
     end
 
     local vendor = ns.Vendors[node]
-    if not vendor then return end
+    if not vendor or not HNH:IsProfessionVendorVisible(node) then return end
 
     local token = {}
     currentHover = token

@@ -27,7 +27,7 @@ local function restoreAll()
     end
 end
 
-local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider, hbdTranslation)
+local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider, hbdTranslation, professionSkillLineID)
     local registered
     local frame
     local factionState = { value = faction }
@@ -79,7 +79,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     local globalNames = {
         "Enum", "next", "pairs", "C_Map", "C_Texture", "C_AddOns", "UnitFactionGroup", "CreateFrame",
         "GameTooltip", "UIParent", "WorldMapFrame", "UiMapPoint", "C_SuperTrack", "C_CurrencyInfo",
-        "C_Item", "Item", "HandyNotes", "LibStub",
+        "C_Item", "Item", "HandyNotes", "LibStub", "GetProfessions", "GetProfessionInfo",
     }
     local originalGlobals = {}
     for index = 1, #globalNames do
@@ -146,6 +146,12 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     }
     _G.C_AddOns = { IsAddOnLoaded = function(name) return false, addons[name] end }
     _G.UnitFactionGroup = function() return factionState.value end
+    _G.GetProfessions = function()
+        if professionSkillLineID then return 1, nil, nil, nil, nil end
+    end
+    _G.GetProfessionInfo = function()
+        if professionSkillLineID then return "Test profession", nil, 1, 100, nil, nil, professionSkillLineID end
+    end
     _G.CreateFrame = function()
         frame = { scripts = {} }
         function frame:GetCenter() return 0 end
@@ -519,6 +525,10 @@ local function run()
     local strata, frameLevel = handler:GetSummaryFrameLayering()
     check(strata == "MEDIUM" and frameLevel == 2024, "summary badge must render above Blizzard Area POIs")
     check(handler:GetMinimapPinScale() == 1.15, "minimap vendor pins must use the enlarged scale")
+    check(not handler:IsProfessionVendorVisible(256026), "Irodalmin must be hidden without Herbalism")
+    local herbalismRuntime = { loadRuntime({}, "Alliance", nil, nil, nil, nil, nil, 182) }
+    check(herbalismRuntime[1]:IsProfessionVendorVisible(256026), "Irodalmin must be visible with Herbalism")
+    herbalismRuntime[8]()
     check(forcedZoneOrder[1] == 102 and forcedZoneOrder[2] == 101, "collision fixture must enumerate zones out of sorted order")
     local zoneNodes = collect(handler, 101, false)
     local zoneVendor = zoneNodes[10001000]

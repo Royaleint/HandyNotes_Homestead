@@ -41,4 +41,6 @@ read_globals = {
     "WorldMapFrame",
     "CreateFromMixins",
     "MapCanvasDataProviderMixin",
+    "GetProfessions",
+    "GetProfessionInfo",
 }

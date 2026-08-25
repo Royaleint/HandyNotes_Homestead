@@ -411,11 +411,15 @@ local function runHomesteadGeographyRegression()
             [101] = { [10001000] = 1 },
             [102] = { [20002000] = 2 },
             [103] = { [30003000] = 3 },
+            [2405] = { [40004000] = 4 },
+            [2599] = { [50005000] = 5 },
         },
         Vendors = {
             [1] = { name = "Broken Isles vendor", items = {} },
             [2] = { name = "Argus vendor", items = {} },
             [3] = { name = "Quel'Thalas vendor", items = {} },
+            [4] = { name = "Voidstorm vendor", items = {} },
+            [5] = { name = "Val vendor", items = {} },
         },
     }
     local fixture = {
@@ -427,6 +431,8 @@ local function runHomesteadGeographyRegression()
         [101] = { mapID = 101, mapType = 3, parentMapID = 619, name = "Broken Isles zone" },
         [102] = { mapID = 102, mapType = 3, parentMapID = 905, name = "Argus zone" },
         [103] = { mapID = 103, mapType = 3, parentMapID = 2537, name = "Quel'Thalas zone" },
+        [2405] = { mapID = 2405, mapType = 3, parentMapID = 2537, name = "Voidstorm" },
+        [2599] = { mapID = 2599, mapType = 3, parentMapID = 2537, name = "Val" },
     }
     local function adjacentRectangles(sourceMapID, targetMapID)
         if targetMapID == 800 and sourceMapID == 619 then return 0.1, 0.3, 0.2, 0.4 end
@@ -434,6 +440,8 @@ local function runHomesteadGeographyRegression()
         if targetMapID == 619 and sourceMapID == 101 then return 0.1, 0.3, 0.2, 0.4 end
         if targetMapID == 13 and sourceMapID == 2537 then return 0.1, 0.3, 0.2, 0.4 end
         if targetMapID == 2537 and sourceMapID == 103 then return 0.5, 0.7, 0.6, 0.8 end
+        if targetMapID == 2537 and sourceMapID == 2405 then return 0.2, 0.4, 0.3, 0.5 end
+        if targetMapID == 2537 and sourceMapID == 2599 then return 0.6, 0.8, 0.7, 0.9 end
     end
     local handler = loadRuntime({}, "Alliance", nil, data, fixture, adjacentRectangles)
     local world = collect(handler, 800, false)
@@ -445,13 +453,24 @@ local function runHomesteadGeographyRegression()
     end
     local worldMapIDs = {}
     for _, node in pairs(world) do worldMapIDs[#worldMapIDs + 1] = tostring(node.record.mapID) end
-    check(easternWorldSummary and easternWorldSummary.vendorCount == 1, "world Eastern Kingdoms summary must include Quel'Thalas vendors: " .. table.concat(worldMapIDs, ","))
+    check(easternWorldSummary and easternWorldSummary.vendorCount == 3, "world Eastern Kingdoms summary must include Quel'Thalas vendors: " .. table.concat(worldMapIDs, ","))
     local easternKingdoms = collect(handler, 13, false)
     local easternZoneSummary
     for _, node in pairs(easternKingdoms) do
         if node.record.zoneMapID == 103 then easternZoneSummary = node.record end
     end
     check(countNodes(easternKingdoms) == 1 and easternZoneSummary, "Eastern Kingdoms view must show the Quel'Thalas overlay zone")
+    local quelThalas = collect(handler, 2537, false)
+    local voidstormSummary
+    for _, node in pairs(quelThalas) do
+        if node.record.zoneMapID == 2405 then voidstormSummary = node.record end
+    end
+    check(voidstormSummary, "Quel'Thalas map must retain its native Voidstorm zone summary")
+    local valSummary
+    for _, node in pairs(quelThalas) do
+        if node.record.zoneMapID == 2599 then valSummary = node.record end
+    end
+    check(valSummary, "Quel'Thalas map must retain its native Val zone summary")
 end
 
 local function run()

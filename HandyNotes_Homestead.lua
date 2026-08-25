@@ -79,7 +79,10 @@ local excludedContinents = { [572] = true, [1550] = true }
 local continentMergesInto = { [905] = 619 }
 local continentOverlaysOnParent = { [2537] = 13 }
 local overlayZoneExclusions = {
-    [2537] = { [2405] = true, [15958] = true, [2444] = true, [2694] = true, [2576] = true, [2413] = true },
+    [2537] = {
+        [2405] = true, [15958] = true, [2444] = true, [2694] = true, [2576] = true, [2413] = true,
+        [2599] = true, -- Val is native to the Quel'Thalas map, not the EK overlay.
+    },
 }
 
 local function DisplayContinent(continentMapID)
@@ -97,8 +100,11 @@ end
 local function ZoneBelongsToView(zoneMapID, viewMapID)
     local continentMapID = ZoneContinent(zoneMapID)
     if not continentMapID then return false end
+    if continentMapID == viewMapID then return true end
     if DisplayContinent(continentMapID) == viewMapID then
-        return not (overlayZoneExclusions[continentMapID] and overlayZoneExclusions[continentMapID][zoneMapID])
+        local isParentOverlay = continentOverlaysOnParent[continentMapID] == viewMapID
+        return not isParentOverlay
+            or not (overlayZoneExclusions[continentMapID] and overlayZoneExclusions[continentMapID][zoneMapID])
     end
     return continentOverlaysOnParent[continentMapID] == viewMapID
         and not (overlayZoneExclusions[continentMapID] and overlayZoneExclusions[continentMapID][zoneMapID])

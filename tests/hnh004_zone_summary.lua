@@ -118,7 +118,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         return nativePairs(table)
     end
 
-    _G.Enum = { UIMapType = { Continent = 2 } }
+    _G.Enum = { UIMapType = { World = 1, Continent = 2 } }
     _G.next = fixtureNext
     _G.pairs = fixturePairs
     _G.C_Map = mapApi
@@ -359,6 +359,30 @@ local function runHBDProjectionFallback()
     checkSummaryAt(summaries, 60007000, 101, 1)
 end
 
+local function runWorldProjectionRegression()
+    local data = {
+        Nodes = { [101] = { [10001000] = 1 } },
+        Vendors = { [1] = { name = "World-map vendor", items = {} } },
+    }
+    local fixture = {
+        [800] = { mapID = 800, mapType = 1, name = "Fixture world" },
+        [900] = { mapID = 900, mapType = 2, parentMapID = 800, name = "Fixture continent" },
+        [101] = { mapID = 101, mapType = 3, parentMapID = 900, name = "World-map zone" },
+    }
+    local function adjacentRectangles(sourceMapID, targetMapID)
+        if sourceMapID == 101 and targetMapID == 900 then
+            return 0.2, 0.4, 0.3, 0.5
+        end
+        if sourceMapID == 900 and targetMapID == 800 then
+            return 0.1, 0.3, 0.2, 0.4
+        end
+        return nil
+    end
+    local handler = loadRuntime({}, "Alliance", nil, data, fixture, adjacentRectangles)
+    local summaries = collect(handler, 800, false)
+    checkSummaryAt(summaries, 16002800, 101, 1)
+end
+
 local function run()
     local standalone = { loadRuntime({}, "Alliance") }
     check(standalone[1], "standalone registration did not capture a plugin handler")
@@ -450,6 +474,7 @@ local function run()
     runCurrentDataProjectionCoverage()
     runNestedProjectionRegression()
     runHBDProjectionFallback()
+    runWorldProjectionRegression()
 end
 
 local ok, err = xpcall(run, debug.traceback)

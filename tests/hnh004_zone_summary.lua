@@ -27,7 +27,7 @@ local function restoreAll()
     end
 end
 
-local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider, hbdTranslation, professionSkillLineID, itemNames, currencyNames)
+local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider, hbdTranslation, professionSkillLineID, itemNames, currencyNames, itemIcons)
     local registered
     local frame
     local factionState = { value = faction }
@@ -38,6 +38,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     local rectangleOrder = {}
     local itemCached = true
     local itemLoadCallbacks = {}
+    local itemLoadCallbacksByID = {}
     local editBoxes = {}
     local timers = {}
     local createdFrames = {}
@@ -293,6 +294,21 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
             return itemNames and itemNames[itemID] or "Cached item"
         end,
         DoesItemExistByID = function() return true end,
+        -- Gated on the same itemCached flag as GetItemInfo: a real client
+        -- with a cold item cache resolves neither icon nor name for ANY
+        -- item, ware or reagent (HNH-021 round 2, Argus Minor 2). A
+        -- per-item table lookup (itemIcons/itemNames absent for a given id)
+        -- separately models "this specific item hasn't loaded yet" even
+        -- while itemCached is true, which is what the cold-reagent tests
+        -- below use.
+        GetItemIconByID = function(itemID)
+            if not itemCached then return nil end
+            return itemIcons and itemIcons[itemID]
+        end,
+        GetItemNameByID = function(itemID)
+            if not itemCached then return nil end
+            return itemNames and itemNames[itemID]
+        end,
     }
     _G.C_Timer = {
         After = function(_, callback) callback() end,
@@ -304,10 +320,14 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         end,
     }
     _G.Item = {
-        CreateFromItemID = function()
+        CreateFromItemID = function(_, itemID)
             return {
                 ContinueOnItemLoad = function(_, callback)
                     itemLoadCallbacks[#itemLoadCallbacks + 1] = callback
+                    -- Keyed alongside the existing positional list so a test
+                    -- can fire a specific item's (ware OR reagent) load
+                    -- callback by id, not just by call order.
+                    itemLoadCallbacksByID[itemID] = callback
                 end,
             }
         end,
@@ -337,7 +357,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     return registered, tooltip, waypoint, function() return mapSelection end, function(value) factionState.value = value end,
         function() return rectangleCalls, rectangleOrder end, forcedZoneOrder, restore, data,
         function(value) itemCached = value end, itemLoadCallbacks, editBoxes, timers, createdFrames,
-        function() return hookInstallations end, function() return libStubCalls end
+        function() return hookInstallations end, function() return libStubCalls end, itemLoadCallbacksByID
 end
 
 local function collect(handler, mapID, minimap)
@@ -976,6 +996,162 @@ local function runVendorTooltipSearch()
     restore()
 end
 
+-- HNH-021: item-based costs (reagent items, e.g. Spare Parts, Polished Pet
+-- Charms) render like Homestead itself — a resolved icon, a resolved name
+-- fallback, or the honest "(other cost)" marker, never the raw item ID —
+-- and match tooltip search by the reagent's name.
+
+-- Finds the first frame line whose text starts with `prefix` (exact-match
+-- helper, not a substring find, so a stray appended marker is caught).
+local function findLine(frame, prefix)
+    for _, line in ipairs(frame.lines) do
+        if type(line) == "string" and line:sub(1, #prefix) == prefix then
+            return line
+        end
+    end
+end
+
+local function runVendorCostRender()
+    local wareIcon = { id = 500, price = 12345, currencies = { { id = 3392, amount = 25 } }, items = { { id = 777, amount = 3 } } }
+    local wareName = { id = 501, price = 100, items = { { id = 778, amount = 3 } } }
+    local wareUnknown = { id = 502, price = 100, items = { { id = 779, amount = 3 } } }
+    local wareOtherCost = { id = 503, otherCost = true }
+    local wareNoReagent = { id = 504, price = 50 }
+    local items = { wareIcon, wareName, wareUnknown, wareOtherCost, wareNoReagent }
+    -- Padding pushes the vendor past LONG_WARES_THRESHOLD so the interactive
+    -- tooltip (with its search box) renders, not the plain path.
+    for itemID = 600, 615 do items[#items + 1] = { id = itemID, price = 1 } end
+
+    local data = {
+        Nodes = { [101] = { [10001000] = 1 } },
+        Vendors = { [1] = { name = "Cost render vendor", items = items } },
+    }
+    local itemNames = {
+        [500] = "Ware Icon", [501] = "Ware Name", [502] = "Ware Unknown",
+        [503] = "Ware Other Cost", [504] = "Ware No Reagent",
+        [778] = "Polished Pet Charm",
+    }
+    local itemIcons = { [777] = 4242 }
+    local currencyNames = { [3392] = "Trader's Tender" }
+    local handler, _, _, _, _, _, _, restore, _, _, _, editBoxes, timers, createdFrames =
+        loadRuntime({}, "Alliance", nil, data, nil, nil, nil, nil, itemNames, currencyNames, itemIcons)
+    local pin = _G.CreateFrame("Button")
+    handler.OnEnter(pin, 101, 10001000)
+    local interactive = findCreatedFrame(createdFrames, "HandyNotesHomesteadWaresTooltip")
+    check(interactive, "cost-render vendor must use the interactive tooltip")
+
+    -- (a)/(e): a resolved icon renders "<amount> |T<icon>:0:0|t"; ordering
+    -- is gold, then currency, then item, joined by " + " — and nothing
+    -- trails it (exact match, not a substring find, so a stray appended
+    -- marker would be caught).
+    local iconLine = findLine(interactive, "Ware Icon")
+    check(iconLine == "Ware Icon12345 + 25 Trader's Tender + 3 |T4242:0:0|t",
+        "resolved-icon cost must render gold + currency + item in that order and nothing else, got " .. tostring(iconLine))
+
+    -- (b): no icon but a resolved name -> "<amount> <name>".
+    local nameLine = findLine(interactive, "Ware Name")
+    check(nameLine == "Ware Name100 + 3 Polished Pet Charm",
+        "an unresolved icon with a resolved name must render the reagent's name, got " .. tostring(nameLine))
+
+    -- (c): neither icon nor name -> the honest marker, never the raw item ID.
+    local unknownLine = findLine(interactive, "Ware Unknown")
+    check(unknownLine == "Ware Unknown100 + |cFFB3B3B3(other cost)|r",
+        "a reagent with neither icon nor name must fall back to the other-cost marker, got " .. tostring(unknownLine))
+    check(not (unknownLine and string.find(unknownLine, "779", 1, true)), "the raw reagent item ID must never reach the tooltip")
+
+    -- (d): a namedCosts-only row (otherCost, no price/currencies/items) still renders the marker.
+    local otherCostLine = findLine(interactive, "Ware Other Cost")
+    check(otherCostLine == "Ware Other Cost|cFFB3B3B3(other cost)|r",
+        "an otherCost-only row must still render the other-cost marker, got " .. tostring(otherCostLine))
+
+    -- (f): reagent-name search keeps a ware carrying that reagent and hides
+    -- a ware with no reagent cost at all.
+    local searchBox = editBoxes[1]
+    searchBox:SetText("polished")
+    timers[#timers].callback()
+    local searched = visibleFrameText(interactive)
+    check(string.find(searched, "Ware Name", 1, true), "reagent-name search must keep a ware carrying that reagent")
+    check(not string.find(searched, "Ware No Reagent", 1, true), "reagent-name search must hide a ware with no matching reagent")
+
+    restore()
+end
+
+-- HNH-021 round 2 (Argus Critical 1): a reagent cost degraded on first
+-- render (no icon, no name) must never freeze — it must request the item's
+-- data and self-correct once it resolves, exactly like the ware-name path
+-- already does. Plain-tooltip coverage.
+local function runVendorCostRenderColdToWarm()
+    local ware = { id = 900, price = 50, items = { { id = 779, amount = 3 } } }
+    local itemIcons = {}
+    local data = {
+        Nodes = { [101] = { [10001000] = 1 } },
+        Vendors = { [1] = { name = "Cold reagent vendor", items = { ware } } },
+    }
+    local itemNames = { [900] = "Cold Ware" }
+    local handler, _, _, _, _, _, _, restore, _, _, itemLoadCallbacks, _, _, createdFrames, _, _, itemLoadCallbacksByID =
+        loadRuntime({}, "Alliance", nil, data, nil, nil, nil, nil, itemNames, nil, itemIcons)
+
+    local pin = _G.CreateFrame("Button")
+    handler.OnEnter(pin, 101, 10001000)
+    local plainTooltip = findCreatedFrame(createdFrames, "HandyNotesHomesteadTooltip")
+    check(plainTooltip, "single-ware cost-render vendor must use the plain tooltip")
+    local coldLine = findLine(plainTooltip, "Cold Ware")
+    check(coldLine == "Cold Ware50 + |cFFB3B3B3(other cost)|r",
+        "a cold reagent must render the marker on first hover, got " .. tostring(coldLine))
+    check(itemLoadCallbacksByID[779],
+        "a load must be requested for the cold reagent (A2) — none was recorded")
+
+    -- Warm the reagent up (as if its data just arrived) and fire its
+    -- recorded load callback exactly the way RequestItemLoad's
+    -- ContinueOnItemLoad handler would.
+    itemIcons[779] = 4242
+    local loadsBefore = #itemLoadCallbacks
+    itemLoadCallbacksByID[779]()
+    check(#itemLoadCallbacks == loadsBefore, "firing an existing load callback must not register a new one")
+    local warmLine = findLine(plainTooltip, "Cold Ware")
+    check(warmLine == "Cold Ware50 + 3 |T4242:0:0|t",
+        "a resolved reagent must self-correct on the triggered re-render instead of staying frozen, got " .. tostring(warmLine))
+    check(ware.costCache == "50 + 3 |T4242:0:0|t",
+        "a fully resolved cost must now be memoized, got " .. tostring(ware.costCache))
+
+    restore()
+end
+
+-- Same scenario on the interactive path: a reagent resolving after the
+-- tooltip's width was measured must trigger a re-measure, not leave the
+-- frozen (narrower) width in place (Argus Major 1, round 2).
+local function runVendorCostRenderInteractiveRemeasure()
+    local coldWare = { id = 900, price = 50, items = { { id = 779, amount = 3 } } }
+    local items = { coldWare }
+    for itemID = 700, 715 do items[#items + 1] = { id = itemID, price = 1 } end
+    local itemIcons = {}
+    local data = {
+        Nodes = { [101] = { [10001000] = 1 } },
+        Vendors = { [1] = { name = "Cold reagent interactive vendor", items = items } },
+    }
+    local itemNames = { [900] = "Cold Ware" }
+    local handler, _, _, _, _, _, _, restore, _, _, _, _, _, createdFrames, _, _, itemLoadCallbacksByID =
+        loadRuntime({}, "Alliance", nil, data, nil, nil, nil, nil, itemNames, nil, itemIcons)
+
+    local pin = _G.CreateFrame("Button")
+    handler.OnEnter(pin, 101, 10001000)
+    local interactive = findCreatedFrame(createdFrames, "HandyNotesHomesteadWaresTooltip")
+    check(interactive, "17-item vendor must use the interactive tooltip")
+    local measuredBefore = interactive.minimumWidth
+    check(itemLoadCallbacksByID[779],
+        "a load must be requested for the cold reagent on the interactive path")
+
+    -- Resolve the reagent (would widen the rendered cost column) and fire
+    -- its callback; a bumped mock width proves whether a re-measure ran.
+    itemIcons[779] = 4242
+    interactive.width = measuredBefore + 500
+    itemLoadCallbacksByID[779]()
+    check(interactive.minimumWidth == measuredBefore + 500,
+        "a reagent resolving after the width was measured must trigger a re-measure, got " .. tostring(interactive.minimumWidth))
+
+    restore()
+end
+
 local function run()
     local standalone = { loadRuntime({}, "Alliance") }
     check(standalone[1], "standalone registration did not capture a plugin handler")
@@ -1093,6 +1269,9 @@ local function run()
     runWorldProjectionRegression()
     runHomesteadGeographyRegression()
     runVendorTooltipSearch()
+    runVendorCostRender()
+    runVendorCostRenderColdToWarm()
+    runVendorCostRenderInteractiveRemeasure()
 end
 
 local ok, err = xpcall(run, debug.traceback)

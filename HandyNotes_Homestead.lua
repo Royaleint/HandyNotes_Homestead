@@ -580,40 +580,57 @@ local mapHideHookInstalled = false
 
 -- Formats an item's cost for display: gold via GetCoinTextureString (coin
 -- icons built in), currencies via a live GetCurrencyInfo icon lookup with a
--- name fallback. Mirrors Homestead's own VendorData:FormatCost, which
--- resolves both live at render time rather than baking a name/icon into the
--- export at build time. No API-existence guard: the .toc is retail-only and
--- both calls exist on every flavor — unlike Homestead's version, which has
--- a real hand-rolled fallback if the guard ever trips, this one would just
--- go silent, so an unreachable guard here is worse than no guard.
+-- name fallback, and item-based reagent costs via GetItemIconByID with a
+-- GetItemNameByID fallback. Mirrors Homestead's own VendorData:FormatCost,
+-- which resolves all three live at render time rather than baking a
+-- name/icon into the export at build time. No API-existence guard: the .toc
+-- is retail-only and every call here exists on every flavor — unlike
+-- Homestead's version, which has a real hand-rolled fallback if the guard
+-- ever trips, this one would just go silent, so an unreachable guard here is
+-- worse than no guard.
 --
--- Result is memoized on the item table itself: the underlying cost DATA
--- never changes once loaded, but RenderTooltip below re-runs in full on
--- every uncached-name load callback, and recomputing GetCurrencyInfo on
--- every re-render would amplify an existing O(n^2) hover cost on a large
--- vendor. `false` means "computed, no cost data"; nil means "not computed
--- yet". Caching for the session means a degraded first-hover result
--- (GetCurrencyInfo returning no name/icon yet) can't self-correct on a
--- later hover the way an unmemoized call would — near-unreachable since
--- currency info is client-side static data Blizzard itself calls
--- unguarded, but the RESOLVED STRING, unlike the data, is in principle a
--- one-shot snapshot.
+-- The "(other cost)" marker covers namedCosts rows (none live today — see
+-- item.otherCost below) and the degraded lookup paths: a currency or reagent
+-- item whose icon and name both fail to resolve. GetCurrencyInfo and
+-- GetItemIconByID/GetItemNameByID are client-side static data and routinely
+-- return nil for an item or currency the player has never held — this is
+-- the ordinary case for a reagent used as a price, not a rare edge case:
+-- Blizzard's own cost-item code (e.g. Blizzard_ItemUpgradeUI.lua) treats it
+-- as expected and re-resolves lazily rather than caching a degraded result.
+--
+-- Returns (cost, complete). `complete` is false whenever any lookup in this
+-- call (currency or reagent item) came back with neither icon nor name — a
+-- degraded result is NEVER written to item.costCache, so the next render
+-- recomputes it from scratch, and RefreshVendorItems below requests the
+-- missing item data so that next render actually happens once it lands.
+-- A fully resolved string IS memoized on the item table (`complete == true`)
+-- because the underlying cost DATA never changes once loaded, and
+-- recomputing GetCurrencyInfo/GetItemIconByID on every re-render would
+-- amplify an existing O(n^2) hover cost on a large vendor. `item.costCache
+-- == false` means "computed, no cost data" (a genuinely free item); nil
+-- means "not computed yet".
 -- Grey (matches the location/"Wares unknown" convention below, 0.7,0.7,0.7).
 local OTHER_COST_TEXT = "|cFFB3B3B3(other cost)|r"
 
 local function FormatCost(item)
     if item.costCache ~= nil then
-        if item.costCache == false then return nil end
-        return item.costCache
+        if item.costCache == false then return nil, true end
+        return item.costCache, true
     end
 
     local parts = {}
-    -- Set by a degraded currency lookup below; combined with item.otherCost
-    -- after the loop rather than appended immediately, so the marker always
-    -- lands last regardless of which currency (if any) failed to resolve —
-    -- otherwise a first-currency failure with a later successful one would
-    -- render "(other cost) + 50 <icon>", marker before the amount.
+    -- Set by a degraded currency/item lookup below; combined with
+    -- item.otherCost after the loops rather than appended immediately, so
+    -- the marker always lands last regardless of which entry (if any)
+    -- failed to resolve — otherwise a first-currency failure with a later
+    -- successful one would render "(other cost) + 50 <icon>", marker before
+    -- the amount.
     local needsOtherCost = false
+    -- True only when a currency/item lookup came back degraded (see the
+    -- header comment) — distinct from needsOtherCost, which also covers the
+    -- permanent namedCosts marker below. A degraded result must never be
+    -- cached; a namedCosts marker is permanent and safe to cache.
+    local degraded = false
 
     if item.price and item.price > 0 then
         parts[#parts + 1] = C_CurrencyInfo.GetCoinTextureString(item.price)
@@ -626,22 +643,48 @@ local function FormatCost(item)
             elseif info and info.name then
                 parts[#parts + 1] = currency.amount .. " " .. info.name
             else
-                -- Currency lookup returned neither icon nor name (rare,
-                -- degraded path). Never print the raw currency ID to a
-                -- player — fall back to the same honest "can't show this"
-                -- marker the out-of-scope-cost path uses.
+                -- Currency lookup returned neither icon nor name — the
+                -- ordinary state for an uncached currency, not a rare edge
+                -- case. Never print the raw currency ID to a player — fall
+                -- back to the same honest "can't show this" marker the
+                -- out-of-scope-cost path uses, and do not cache this result.
                 needsOtherCost = true
+                degraded = true
+            end
+        end
+    end
+    if item.items then
+        for _, itemCost in ipairs(item.items) do
+            local icon = C_Item.GetItemIconByID(itemCost.id)
+            if icon then
+                parts[#parts + 1] = itemCost.amount .. " |T" .. icon .. ":0:0|t"
+            else
+                local name = C_Item.GetItemNameByID(itemCost.id)
+                if name then
+                    parts[#parts + 1] = itemCost.amount .. " " .. name
+                else
+                    -- Item lookup returned neither icon nor name — the
+                    -- ordinary state for a reagent the player has never
+                    -- held, not a rare edge case (see header comment).
+                    -- Never print the raw item ID to a player — fall back
+                    -- to the same honest "can't show this" marker the
+                    -- out-of-scope-cost path uses, and do not cache this
+                    -- result.
+                    needsOtherCost = true
+                    degraded = true
+                end
             end
         end
     end
     -- LOAD-BEARING, not cosmetic: this is the only thing standing between a
     -- price-carrying otherCost row (e.g. "800g" on an item that really costs
-    -- 800g + reagents) and the understated-price defect this feature was
-    -- built to avoid. The exporter guarantees every such row sets
-    -- item.otherCost — nothing else in this file re-derives or re-checks
-    -- that. If this branch is ever dropped, short-circuited, or refactored
-    -- away, the understated price comes back silently: tests and luacheck
-    -- both pass, because the export data is correct — only the tooltip lies.
+    -- 800g + a named favor) and the understated-price defect this feature
+    -- was built to avoid. The exporter guarantees every such row (namedCosts
+    -- today) sets item.otherCost — nothing else in this file re-derives or
+    -- re-checks that. If this branch is ever dropped, short-circuited, or
+    -- refactored away, the understated price comes back silently: tests and
+    -- luacheck both pass, because the export data is correct — only the
+    -- tooltip lies.
     if item.otherCost then
         needsOtherCost = true
     end
@@ -649,12 +692,18 @@ local function FormatCost(item)
         parts[#parts + 1] = OTHER_COST_TEXT
     end
 
-    if #parts == 0 then
-        item.costCache = false
-        return nil
+    local cost = (#parts > 0) and table.concat(parts, " + ") or nil
+    if degraded then
+        -- Do not memoize: this render's cost may be missing a currency or
+        -- reagent name/icon that simply hasn't loaded yet. Returning
+        -- complete == false tells the caller to keep this hover "pending"
+        -- so RefreshVendorItems requests the missing item data and the next
+        -- render (triggered by that load) recomputes instead of reusing a
+        -- frozen degraded string.
+        return cost, false
     end
-    item.costCache = table.concat(parts, " + ")
-    return item.costCache
+    item.costCache = (cost == nil) and false or cost
+    return cost, true
 end
 
 local function ItemMatchesTooltipSearch(item, itemName)
@@ -666,6 +715,17 @@ local function ItemMatchesTooltipSearch(item, itemName)
         for _, currency in ipairs(item.currencies) do
             local info = C_CurrencyInfo.GetCurrencyInfo(currency.id)
             if info and info.name and info.name:lower():find(tooltipSearchQuery, 1, true) then
+                return true
+            end
+        end
+    end
+    if item.items then
+        for _, itemCost in ipairs(item.items) do
+            -- GetItemNameByID, not GetItemInfo, so the search never triggers
+            -- item loads; it returns nil when uncached and the row simply
+            -- doesn't match on reagent name yet.
+            local name = C_Item.GetItemNameByID(itemCost.id)
+            if name and name:lower():find(tooltipSearchQuery, 1, true) then
                 return true
             end
         end
@@ -706,7 +766,8 @@ local function RenderPlainTooltip(tooltip, vendor)
             if not itemName then pending = true end
             if ItemMatchesTooltipSearch(item, itemName) then
                 matches = matches + 1
-                local cost = FormatCost(item)
+                local cost, complete = FormatCost(item)
+                if not complete then pending = true end
                 if cost then
                     tooltip:AddDoubleLine(itemName or "...", cost, 1, 1, 1, 1, 1, 1)
                 else
@@ -759,7 +820,8 @@ end
 
 -- Emits the header plus the matching wares from `first` (1-based match
 -- index) for up to `limit` rows, with the plain tooltip's exact calls.
--- `everyWare` ignores the search query (the width-measuring pass).
+-- `everyWare` ignores the search query (the width-measuring pass). Returns
+-- true if any drawn row's cost was incomplete (see FormatCost).
 local function AddInteractiveLines(frame, vendor, first, limit, everyWare)
     frame:ClearLines()
     AddVendorHeader(frame, vendor)
@@ -767,13 +829,15 @@ local function AddInteractiveLines(frame, vendor, first, limit, everyWare)
     frame:AddLine("Wares:", 1, 0.82, 0)
     local matchIndex = 0
     local shown = 0
+    local pending = false
     for _, item in ipairs(vendor.items) do
         local itemName = C_Item.GetItemInfo(item.id)
         if everyWare or ItemMatchesTooltipSearch(item, itemName) then
             matchIndex = matchIndex + 1
             if matchIndex >= first and shown < limit then
                 shown = shown + 1
-                local cost = FormatCost(item)
+                local cost, complete = FormatCost(item)
+                if not complete then pending = true end
                 if cost then
                     frame:AddDoubleLine(itemName or "...", cost, 1, 1, 1, 1, 1, 1)
                 else
@@ -783,6 +847,7 @@ local function AddInteractiveLines(frame, vendor, first, limit, everyWare)
         end
     end
     if matchIndex == 0 then frame:AddLine("No matching wares", 0.7, 0.7, 0.7) end
+    return pending
 end
 
 local function RenderInteractiveTooltip(vendor)
@@ -793,6 +858,11 @@ local function RenderInteractiveTooltip(vendor)
     for _, item in ipairs(vendor.items) do
         local itemName = C_Item.GetItemInfo(item.id)
         if itemName then resolved = resolved + 1 else pending = true end
+        -- A reagent icon/name resolving after the width was measured must
+        -- also trigger a re-measure, so resolved counts resolved ware names
+        -- PLUS complete costs, not just names.
+        local _, costComplete = FormatCost(item)
+        if costComplete then resolved = resolved + 1 else pending = true end
         if ItemMatchesTooltipSearch(item, itemName) then
             matches = matches + 1
         end
@@ -812,7 +882,7 @@ local function RenderInteractiveTooltip(vendor)
     -- measure running, and a zero width (rect not yet valid) is not recorded,
     -- so the next render measures again instead of freezing the floor.
     if frame.measuredVendor ~= vendor or frame.measuredResolved ~= resolved then
-        AddInteractiveLines(frame, vendor, 1, math.huge, true)
+        if AddInteractiveLines(frame, vendor, 1, math.huge, true) then pending = true end
         -- Reset the minimum before measuring or the previous vendor's width
         -- would floor this one's measurement.
         frame:SetMinimumWidth(INTERACTIVE_MIN_WIDTH)
@@ -829,7 +899,7 @@ local function RenderInteractiveTooltip(vendor)
         end
     end
 
-    AddInteractiveLines(frame, vendor, frame.scrollOffset + 1, MAX_VISIBLE_WARE_ROWS)
+    if AddInteractiveLines(frame, vendor, frame.scrollOffset + 1, MAX_VISIBLE_WARE_ROWS) then pending = true end
     frame:SetMinimumWidth(frame.measuredWidth)
     frame:SetPadding(rightPadding, INTERACTIVE_BOTTOM_PADDING)
     frame:Show()
@@ -983,13 +1053,29 @@ local function EnsureInteractiveTooltip()
     return frame
 end
 
+-- Shared by the ware-name request below and the reagent-cost request: asks
+-- the client to load one item's data and re-renders the still-active hover
+-- when it lands. Two call sites, one callback shape.
+local function RequestItemLoad(itemID, token, render)
+    Item:CreateFromItemID(itemID):ContinueOnItemLoad(function()
+        if currentHover == token then render(token.vendor) end
+    end)
+end
+
 local function RefreshVendorItems(token, render)
     if not render(token.vendor) then return end
     for _, item in ipairs(token.vendor.items) do
         if not C_Item.GetItemInfo(item.id) and C_Item.DoesItemExistByID(item.id) then
-            Item:CreateFromItemID(item.id):ContinueOnItemLoad(function()
-                if currentHover == token then render(token.vendor) end
-            end)
+            RequestItemLoad(item.id, token, render)
+        end
+        -- Reagent item-costs (item.items) need the same load request as the
+        -- ware itself, or FormatCost's degraded result never self-corrects.
+        if item.items then
+            for _, itemCost in ipairs(item.items) do
+                if not C_Item.GetItemIconByID(itemCost.id) and C_Item.DoesItemExistByID(itemCost.id) then
+                    RequestItemLoad(itemCost.id, token, render)
+                end
+            end
         end
     end
 end

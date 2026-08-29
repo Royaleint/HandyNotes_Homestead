@@ -27,17 +27,22 @@ local function restoreAll()
     end
 end
 
-local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider, hbdTranslation, professionSkillLineID)
+local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider, hbdTranslation, professionSkillLineID, itemNames, currencyNames)
     local registered
     local frame
     local factionState = { value = faction }
-    local tooltip = { lines = {}, owner = nil }
+    local tooltip = { lines = {}, owner = nil, scripts = {}, hookInstallations = 0 }
     local waypoint = { set = 0, clear = 0, superTrack = 0 }
     local mapSelection
     local rectangleCalls = 0
     local rectangleOrder = {}
     local itemCached = true
     local itemLoadCallbacks = {}
+    local editBoxes = {}
+    local timers = {}
+    local createdFrames = {}
+    local hookInstallations = 0
+    local libStubCalls = 0
     local fixture = runtimeFixture or {
         [900] = { mapID = 900, mapType = 2 },
         [101] = { mapID = 101, mapType = 3, parentMapID = 900, name = "Alpha" },
@@ -79,7 +84,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     local globalNames = {
         "Enum", "next", "pairs", "C_Map", "C_Texture", "C_AddOns", "UnitFactionGroup", "CreateFrame",
         "GameTooltip", "UIParent", "WorldMapFrame", "UiMapPoint", "C_SuperTrack", "C_CurrencyInfo",
-        "C_Item", "Item", "HandyNotes", "LibStub", "GetProfessions", "GetProfessionInfo",
+        "C_Item", "Item", "C_Timer", "HandyNotes", "LibStub", "GetProfessions", "GetProfessionInfo",
     }
     local originalGlobals = {}
     for index = 1, #globalNames do
@@ -152,12 +157,74 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     _G.GetProfessionInfo = function()
         if professionSkillLineID then return "Test profession", nil, 1, 100, nil, nil, professionSkillLineID end
     end
-    _G.CreateFrame = function()
-        frame = { scripts = {} }
+    _G.CreateFrame = function(frameType, name, parent, template)
+        frame = { frameType = frameType, name = name, parent = parent, template = template, scripts = {}, lines = {}, fontStrings = {} }
+        createdFrames[#createdFrames + 1] = frame
         function frame:GetCenter() return 0 end
         function frame:RegisterEvent() end
         function frame:UnregisterEvent() end
-        function frame:SetScript(name, callback) self.scripts[name] = callback end
+        function frame:SetScript(scriptName, callback) self.scripts[scriptName] = callback end
+        function frame:HookScript(scriptName, callback)
+            hookInstallations = hookInstallations + 1
+            self.hookInstallations = (self.hookInstallations or 0) + 1
+            self.scripts[scriptName] = callback
+        end
+        function frame:SetFrameStrata(strata) self.strata = strata end
+        function frame:SetClampedToScreen(value) self.clamped = value end
+        function frame:EnableMouse(value) self.mouseEnabled = value end
+        function frame:EnableMouseWheel(value) self.mouseWheelEnabled = value end
+        function frame:EnableKeyboard(value) self.keyboardEnabled = value end
+        function frame:SetPropagateKeyboardInput(value)
+            self.propagateCalls = self.propagateCalls or {}
+            self.propagateCalls[#self.propagateCalls + 1] = value
+            self.propagateKeyboardInput = value
+        end
+        function frame:SetPoint(...) self.points = self.points or {}; self.points[#self.points + 1] = { ... } end
+        function frame:ClearAllPoints() self.points = {} end
+        function frame:SetWidth(value) self.width = value end
+        function frame:SetHeight(value) self.height = value end
+        function frame:SetSize(width, height) self.width = width; self.height = height end
+        function frame:GetWidth() return self.width or 0 end
+        function frame:GetHeight() return self.height or 0 end
+        function frame:Show() self.shown = true; if self.scripts.OnShow then self.scripts.OnShow(self) end end
+        function frame:Hide() self.shown = false; if self.scripts.OnHide then self.scripts.OnHide(self) end end
+        function frame:IsShown() return self.shown end
+        function frame:IsMouseOver() return self.mouseOver end
+        function frame:SetOwner(owner) self.owner = owner end
+        function frame:GetOwner() return self.owner end
+        function frame:ClearLines() self.lines = {} end
+        function frame:SetText(text) self.lines = { text } end
+        function frame:AddLine(text) self.lines[#self.lines + 1] = text end
+        function frame:AddDoubleLine(left, right) self.lines[#self.lines + 1] = left .. right end
+        function frame:SetScrollChild(child) self.scrollChild = child end
+        function frame:SetVerticalScroll(value) self.verticalScroll = value end
+        function frame:GetVerticalScroll() return self.verticalScroll or 0 end
+        function frame:GetVerticalScrollRange() return self.verticalScrollRange or 0 end
+        function frame:CreateFontString()
+            local line = { shown = false }
+            self.fontStrings[#self.fontStrings + 1] = line
+            line.SetPoint = function(...) line.point = { ... } end
+            line.ClearAllPoints = function() line.point = nil end
+            line.SetText = function(_, text) line.text = text end
+            line.Show = function() line.shown = true end
+            line.Hide = function() line.shown = false end
+            return line
+        end
+        if frameType == "EditBox" then
+            editBoxes[#editBoxes + 1] = frame
+            function frame:SetAutoFocus() end
+            function frame:SetMaxLetters() end
+            function frame:SetText(text)
+                self.text = text
+                if self.scripts.OnTextChanged then self.scripts.OnTextChanged(self) end
+            end
+            function frame:GetText() return self.text or "" end
+            function frame:HasFocus() return self.focused end
+            function frame:ClearFocus()
+                self.focused = nil
+                if self.scripts.OnEditFocusLost then self.scripts.OnEditFocusLost(self) end
+            end
+        end
         return frame
     end
     _G.GameTooltip = tooltip
@@ -168,14 +235,45 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     function tooltip:AddDoubleLine(left, right) self.lines[#self.lines + 1] = left .. right end
     function tooltip:Show() end
     function tooltip:Hide() self.owner = nil end
+    function tooltip:HookScript(name, callback)
+        hookInstallations = hookInstallations + 1
+        self.hookInstallations = self.hookInstallations + 1
+        self.scripts[name] = callback
+    end
+    function tooltip:IsMouseOver() return self.mouseOver end
     _G.UIParent = { GetCenter = function() return 0 end }
-    _G.WorldMapFrame = { SetMapID = function(_, mapID) mapSelection = mapID end }
+    _G.WorldMapFrame = {
+        scripts = {},
+        SetMapID = function(_, mapID) mapSelection = mapID end,
+        HookScript = function(worldMap, scriptName, callback)
+            hookInstallations = hookInstallations + 1
+            worldMap.scripts[scriptName] = callback
+        end,
+    }
     _G.UiMapPoint = { CreateFromCoordinates = function(_, x, y) return { x = x, y = y } end }
     _G.C_SuperTrack = { SetSuperTrackedUserWaypoint = function() waypoint.superTrack = waypoint.superTrack + 1 end }
-    _G.C_CurrencyInfo = { GetCoinTextureString = function(price) return tostring(price) end, GetCurrencyInfo = function() end }
+    _G.C_CurrencyInfo = {
+        GetCoinTextureString = function(price) return tostring(price) end,
+        GetCurrencyInfo = function(currencyID)
+            local name = currencyNames and currencyNames[currencyID]
+            return name and { name = name } or nil
+        end,
+    }
     _G.C_Item = {
-        GetItemInfo = function() return itemCached and "Cached item" or nil end,
+        GetItemInfo = function(itemID)
+            if not itemCached then return nil end
+            return itemNames and itemNames[itemID] or "Cached item"
+        end,
         DoesItemExistByID = function() return true end,
+    }
+    _G.C_Timer = {
+        After = function(_, callback) callback() end,
+        NewTimer = function(_, callback)
+            local timer = { cancelled = false }
+            function timer:Cancel() self.cancelled = true end
+            timers[#timers + 1] = { timer = timer, callback = callback }
+            return timer
+        end,
     }
     _G.Item = {
         CreateFromItemID = function()
@@ -191,6 +289,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         getXY = function(_, coord) return math.floor(coord / 10000) / 10000, (coord % 10000) / 10000 end,
     }
     _G.LibStub = function(name)
+        libStubCalls = libStubCalls + 1
         if name == "AceDB-3.0" then
             return { New = function() return { profile = { icon_scale = 1, icon_alpha = 1 } } end }
         end
@@ -206,10 +305,11 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     end
 
     assert(loadfile("HandyNotes_Homestead.lua"))("HandyNotes_Homestead", data)
-    frame.scripts.OnEvent(frame)
+    if frame then frame.scripts.OnEvent(frame) end
     return registered, tooltip, waypoint, function() return mapSelection end, function(value) factionState.value = value end,
         function() return rectangleCalls, rectangleOrder end, forcedZoneOrder, restore, data,
-        function(value) itemCached = value end, itemLoadCallbacks
+        function(value) itemCached = value end, itemLoadCallbacks, editBoxes, timers, createdFrames,
+        function() return hookInstallations end, function() return libStubCalls end
 end
 
 local function collect(handler, mapID, minimap)
@@ -508,18 +608,235 @@ local function runHomesteadGeographyRegression()
     check(coiledCount == 2, "The Coiled Isle badge must include the Vault of Atal'Utek child map, got " .. tostring(coiledCount))
 end
 
+local function findCreatedFrame(createdFrames, name)
+    for _, created in ipairs(createdFrames) do
+        if created.name == name then return created end
+    end
+end
+
+local function visibleFrameText(frame)
+    local lines = {}
+    for _, line in ipairs(frame.fontStrings) do
+        if line.shown and line.text then lines[#lines + 1] = line.text end
+    end
+    if frame.content then
+        for _, line in ipairs(frame.content.fontStrings) do
+            if line.shown and line.text then lines[#lines + 1] = line.text end
+        end
+    end
+    return table.concat(lines, "\n")
+end
+
+local function runVendorTooltipSearch()
+    local shortItems = {}
+    for itemID = 1, 15 do shortItems[#shortItems + 1] = { id = itemID } end
+    local shortData = {
+        Nodes = { [101] = { [10001000] = 1 } },
+        Vendors = { [1] = { name = "Short vendor", items = shortItems } },
+    }
+    local shortRuntime = { loadRuntime({}, "Alliance", nil, shortData) }
+    local shortHandler, sharedTooltip, _, _, _, _, _, shortRestore, _, _, _, shortEditBoxes, _, shortFrames, shortHookCount = unpack(shortRuntime)
+    local shortPin = _G.CreateFrame("Button")
+    shortHandler.OnEnter(shortPin, 101, 10001000)
+    local plainTooltip = findCreatedFrame(shortFrames, "HandyNotesHomesteadTooltip")
+    check(plainTooltip and plainTooltip.frameType == "GameTooltip" and plainTooltip.template == "GameTooltipTemplate",
+        "15 wares must use HNH's dedicated plain GameTooltip")
+    check(plainTooltip.owner == shortPin and plainTooltip.strata == "TOOLTIP" and plainTooltip.clamped,
+        "plain tooltip must be tooltip-strata, clamped, and owned by its pin")
+    check(#shortEditBoxes == 0 and not findCreatedFrame(shortFrames, "HandyNotesHomesteadWaresTooltip"),
+        "plain path must not create the interactive frame or search box")
+    check(not string.find(table.concat(plainTooltip.lines, "\n"), "Search wares...", 1, true),
+        "plain tooltip must not render search controls")
+    check(sharedTooltip.hookInstallations == 0 and shortHookCount() == 2,
+        "plain path must install exactly its pin-hide and map-hide teardown hooks, and none on the shared GameTooltip")
+    shortHandler.OnLeave(shortPin, 101, 10001000)
+    check(not plainTooltip.shown, "plain tooltip must hide as soon as its pin is left")
+
+    shortHandler.OnEnter(shortPin, 101, 10001000)
+    check(plainTooltip.shown, "re-hovering a short vendor must reopen the plain tooltip")
+    check(shortPin.scripts.OnHide, "plain path must hook its pin's OnHide")
+    shortPin.scripts.OnHide(shortPin)
+    check(not plainTooltip.shown, "hiding a short vendor's pin must hide the plain tooltip")
+    plainTooltip.shown = true
+    shortHandler.OnLeave(shortPin, 101, 10001000)
+    check(plainTooltip.shown, "hiding the pin must clear the hover token, leaving OnLeave nothing to close")
+
+    shortHandler.OnEnter(shortPin, 101, 10001000)
+    check(_G.WorldMapFrame.scripts.OnHide, "plain path must hook the world map's OnHide")
+    _G.WorldMapFrame.scripts.OnHide(_G.WorldMapFrame)
+    check(not plainTooltip.shown, "hiding the map must hide the plain tooltip")
+    check(shortHookCount() == 2, "plain-path teardown hooks must install once, not once per hover")
+    shortRestore()
+
+    local longItems = {}
+    for itemID = 1, 16 do
+        longItems[#longItems + 1] = { id = itemID, currencies = { { id = itemID == 1 and 100 or 200, amount = itemID } } }
+    end
+    local data = {
+        Nodes = { [101] = { [10001000] = 1, [20002000] = 2, [30003000] = 3, [40004000] = 4 } },
+        Vendors = {
+            [1] = {
+                name = "Search vendor",
+                items = longItems,
+            },
+            [2] = { name = "Retarget vendor", items = longItems },
+            [3] = { name = "Short retarget vendor", items = shortItems },
+            [4] = { name = "Forty ware vendor", items = {} },
+        },
+    }
+    local itemNames = { [1] = "Crystal Vase", [2] = "Weathered Banner" }
+    for itemID = 3, 40 do itemNames[itemID] = "Ware " .. itemID end
+    for itemID = 1, 40 do data.Vendors[4].items[#data.Vendors[4].items + 1] = { id = itemID } end
+    local currencyNames = { [100] = "Trader's Tender", [200] = "Honor" }
+    local runtime = {
+        loadRuntime({}, "Alliance", nil, data, nil, nil, nil, nil, itemNames, currencyNames),
+    }
+    local handler, tooltip, _, _, _, _, _, restore, _, _, _, editBoxes, timers, createdFrames, hookCount = unpack(runtime)
+    local pin = _G.CreateFrame("Button")
+    handler.OnEnter(pin, 101, 10001000)
+    check(hookCount() == 2, "the first long hover must install exactly its pin-hide and map-hide teardown hooks")
+    local interactive = findCreatedFrame(createdFrames, "HandyNotesHomesteadWaresTooltip")
+    check(interactive and interactive.template == "TooltipBackdropTemplate" and interactive.mouseEnabled,
+        "16 wares must use HNH's interactive tooltip-styled frame")
+    check(interactive.strata == "TOOLTIP" and interactive.clamped and interactive.shown,
+        "interactive frame must be tooltip-strata, clamped, and visible")
+    local scrolling
+    for _, created in ipairs(createdFrames) do
+        if created.frameType == "ScrollFrame"
+            or (created.template and string.find(created.template, "Scroll", 1, true)) then
+            scrolling = created
+        end
+    end
+    check(not scrolling, "interactive tooltip must use a fixed recycled line pool, not a scroll frame")
+    check(#editBoxes == 1, "interactive path must create one reusable search input")
+    check(tooltip.hookInstallations == 0, "interactive path must not hook the shared GameTooltip")
+
+    local searchBox = editBoxes[1]
+    check(searchBox.parent == interactive and searchBox.points[1][3] == "BOTTOMLEFT",
+        "search input must stay at the bottom of the interactive frame")
+    check(string.find(visibleFrameText(interactive), "Search vendor", 1, true),
+        "interactive tooltip must render its vendor header")
+    check(string.find(visibleFrameText(interactive), "Search wares...", 1, true),
+        "interactive tooltip must label its bottom search box")
+    check(pin.scripts.OnHide, "interactive tooltip must close when its pin hides")
+    interactive.scripts.OnMouseWheel(interactive, -1)
+    check(interactive.scrollOffset == 1 and string.find(visibleFrameText(interactive), "Ware 16", 1, true),
+        "a 16-item vendor must show ware 16 after scrolling to the end")
+
+    interactive.mouseOver = true
+    handler.OnLeave(pin, 101, 10001000)
+    check(interactive.shown, "pin leave must keep the frame open while the cursor crosses onto it")
+    interactive.mouseOver = nil
+    check(interactive.scripts.OnLeave, "interactive frame must close when its own cursor leaves")
+    searchBox.focused = true
+    interactive.scripts.OnLeave(interactive)
+    check(not interactive.shown and not searchBox.focused,
+        "interactive frame leave must close the frame and clear search focus")
+
+    handler.OnEnter(pin, 101, 10001000)
+    searchBox.focused = true
+    pin.scripts.OnHide(pin)
+    check(not interactive.shown and not searchBox.focused,
+        "hiding the pin must close the frame and clear search focus")
+
+    handler.OnEnter(pin, 101, 10001000)
+    searchBox.focused = true
+    local retargetPin = _G.CreateFrame("Button")
+    handler.OnEnter(retargetPin, 101, 20002000)
+    check(interactive.shown and not searchBox.focused,
+        "re-targeting must clear search focus before reusing the frame")
+
+    searchBox.focused = true
+    WorldMapFrame.scripts.OnHide(WorldMapFrame)
+    check(not interactive.shown and not searchBox.focused,
+        "hiding the map must close the frame and clear search focus")
+
+    handler.OnEnter(pin, 101, 10001000)
+    searchBox.focused = true
+    handler.OnEnter(_G.CreateFrame("Button"), 101, 30003000)
+    check(not interactive.shown and not searchBox.focused,
+        "opening a short vendor must close the long frame and clear search focus")
+
+    handler.OnEnter(pin, 101, 10001000)
+    searchBox.focused = nil
+    check(interactive.scripts.OnKeyDown, "interactive frame must receive keys without search focus")
+    check(interactive.keyboardEnabled == true, "interactive frame must take keyboard input from creation")
+    searchBox:SetText("weathered")
+    interactive.scripts.OnKeyDown(interactive, "A")
+    local calls = interactive.propagateCalls
+    check(interactive.shown and calls[#calls] == true,
+        "an ordinary key must pass through to the game and leave the tooltip open")
+    interactive.scripts.OnKeyDown(interactive, "ESCAPE")
+    calls = interactive.propagateCalls
+    check(not interactive.shown and calls[#calls] == false,
+        "frame-level Escape must consume the key and close the tooltip")
+
+    handler.OnEnter(pin, 101, 10001000)
+    searchBox.focused = true
+    searchBox.scripts.OnEscapePressed(searchBox)
+    check(not interactive.shown and not searchBox.focused, "search-box Escape must close the frame and drop focus")
+
+    handler.OnEnter(pin, 101, 10001000)
+    searchBox.focused = true
+    searchBox.scripts.OnEnterPressed(searchBox)
+    check(not searchBox.focused, "Enter must drop search focus")
+
+    searchBox:SetText("trad")
+    searchBox:SetText("tender")
+    check(#timers == 3 and timers[2].timer.cancelled, "vendor tooltip search must debounce obsolete queries")
+    timers[3].callback()
+    local tenderLines = visibleFrameText(interactive)
+    check(string.find(tenderLines, "Crystal Vase", 1, true), "currency query must retain the matching ware")
+    check(not string.find(tenderLines, "Weathered Banner", 1, true), "currency query must exclude non-matching wares")
+
+    searchBox:SetText("weathered")
+    timers[4].callback()
+    local itemLines = visibleFrameText(interactive)
+    check(string.find(itemLines, "Weathered Banner", 1, true), "item-name query must retain the matching ware")
+    check(not string.find(itemLines, "Crystal Vase", 1, true), "item-name query must exclude non-matching wares")
+
+    searchBox:SetText("missing")
+    timers[5].callback()
+    check(string.find(visibleFrameText(interactive), "No matching wares", 1, true),
+        "no-match query must report the empty result")
+
+    handler.OnEnter(retargetPin, 101, 20002000)
+    check(interactive.shown and string.find(visibleFrameText(interactive), "Retarget vendor", 1, true),
+        "entering another pin must retarget the reusable interactive frame")
+    check(searchBox.text == "", "re-opening or retargeting must clear the search text")
+    local fortyPin = _G.CreateFrame("Button")
+    handler.OnEnter(fortyPin, 101, 40004000)
+    for _ = 1, 40 do interactive.scripts.OnMouseWheel(interactive, -1) end
+    check(interactive.scrollOffset == 25 and string.find(visibleFrameText(interactive), "Ware 40", 1, true),
+        "a 40-item vendor must show ware 40 after scrolling to the end")
+    WorldMapFrame.scripts.OnHide(WorldMapFrame)
+    check(not interactive.shown, "hiding the map must close the interactive frame")
+    check(hookCount() == 5,
+        "the interactive path must install one pin-hide hook per hovered pin plus the single shared map-hide hook")
+    restore()
+end
+
 local function run()
     local standalone = { loadRuntime({}, "Alliance") }
     check(standalone[1], "standalone registration did not capture a plugin handler")
+    check(standalone[2].hookInstallations == 0,
+        "standalone load must not install shared-tooltip hooks")
     standalone[8]()
+    -- Every LibStub call in the file sits past the login guard, so a zero call
+    -- count is what actually separates the no-op path from a live load; the
+    -- checks run before the registration check so a disabled guard trips them.
     local homestead = { loadRuntime({ Homestead = true }, "Alliance") }
+    check(homestead[2].hookInstallations == 0 and homestead[15]() == 0 and homestead[16]() == 0,
+        "Homestead-enabled path installed a hook or initialized its libraries past its login listener")
     check(not homestead[1], "Homestead-enabled path registered the plugin")
     homestead[8]()
     local devBuild = { loadRuntime({ Homestead_DevBuild = true }, "Alliance") }
+    check(devBuild[2].hookInstallations == 0 and devBuild[15]() == 0 and devBuild[16]() == 0,
+        "Homestead_DevBuild-enabled path installed a hook or initialized its libraries past its login listener")
     check(not devBuild[1], "Homestead_DevBuild-enabled path registered the plugin")
     devBuild[8]()
 
-    local handler, tooltip, waypoint, selectedMap, setFaction, rectangleStats, forcedZoneOrder, _, data, setItemCached, itemLoadCallbacks = loadRuntime({}, "Alliance")
+    local handler, tooltip, waypoint, selectedMap, setFaction, rectangleStats, forcedZoneOrder, _, data, setItemCached, itemLoadCallbacks, _, _, createdFrames = loadRuntime({}, "Alliance")
     local adjustedSize, iconSize = handler:GetSummaryVisualSizes(1)
     check(adjustedSize == 11 and iconSize == 13, "summary badge must use slightly enlarged Homestead-sized world icon geometry")
     local strata, frameLevel = handler:GetSummaryFrameLayering()
@@ -535,7 +852,9 @@ local function run()
     check(zoneVendor and type(zoneVendor.record) == "number", "zone vendor at 10001000 expected numeric record, got " .. tostring(zoneVendor and zoneVendor.record))
     local pin = { GetCenter = function() return 0 end }
     handler.OnEnter(pin, 101, 10001000)
-    check(tooltip.lines[1] == "Alliance vendor" and tooltip.lines[4] == "Wares:" and tooltip.lines[5] == "Cached item", "numeric vendor OnEnter must retain its wares tooltip path")
+    local plainTooltip = findCreatedFrame(createdFrames, "HandyNotesHomesteadTooltip")
+    check(plainTooltip and plainTooltip.lines[1] == "Alliance vendor" and plainTooltip.lines[4] == "Wares:" and plainTooltip.lines[5] == "Cached item",
+        "numeric vendor OnEnter must retain its dedicated plain wares tooltip path")
 
     local summaries = collect(handler, 900, false)
     check(countNodes(summaries) == 2, "continent must emit one summary for each rectangle-projectable eligible zone")
@@ -586,6 +905,9 @@ local function run()
     check(#tooltip.lines == 3 and tooltip.lines[1] == "Alpha" and tooltip.lines[2] == "2 vendors", "summary tooltip must contain only the zone and vendor count")
     check(type(tooltip.lines[3]) == "string" and string.find(string.lower(tooltip.lines[3]), "click"), "summary tooltip must include a click instruction")
     check(not string.find(table.concat(tooltip.lines, "\n"), "Alliance vendor") and not string.find(table.concat(tooltip.lines, "\n"), "Wares") and not string.find(table.concat(tooltip.lines, "\n"), "Cached item"), "summary tooltip must not render vendor wares or item lines")
+    check(tooltip.owner == pin, "summary hover must own the shared tooltip")
+    handler.OnLeave(pin, 900, 15009999)
+    check(tooltip.owner == nil, "leaving a summary badge must hide the shared tooltip")
     setItemCached(false)
     handler.OnEnter(pin, 101, 10001000)
     check(#itemLoadCallbacks == 1, "uncached vendor tooltip must retain its item-load callback")
@@ -610,6 +932,7 @@ local function run()
     runHBDProjectionFallback()
     runWorldProjectionRegression()
     runHomesteadGeographyRegression()
+    runVendorTooltipSearch()
 end
 
 local ok, err = xpcall(run, debug.traceback)

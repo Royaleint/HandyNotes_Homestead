@@ -24,8 +24,11 @@ manual-changelog:
 
 # Repo-meta files: keep out of the packaged addon. HNH_Dev is the nested
 # private tracker repo and is untracked in git, so CI checkouts never contain
-# it — listed anyway so a local packager run can't ship it either.
+# it — listed anyway so a local packager run can't ship it either. .claude
+# holds tracked release commands and can hold local review reports; none of
+# it belongs in the zip.
 ignore:
+  - .claude
   - .github
   - .gitignore
   - .luacheckrc

@@ -569,7 +569,6 @@ end
 
 local LONG_WARES_THRESHOLD = 15
 local MAX_VISIBLE_WARE_ROWS = 15
-local WARE_ROW_HEIGHT = 18
 local currentHover
 local plainTooltip
 local interactiveTooltip
@@ -725,65 +724,152 @@ local function RenderPlainTooltip(tooltip, vendor)
     return pending
 end
 
-local function SetInteractiveLine(line, text, row)
-    if text then
-        line:ClearAllPoints()
-        line:SetPoint("TOPLEFT", interactiveTooltip, "TOPLEFT", 10, -(60 + (row - 1) * WARE_ROW_HEIGHT))
-        line:SetText(text)
-        line:Show()
-    else
-        line:Hide()
+-- The interactive tooltip IS a GameTooltip (same template, same AddLine /
+-- AddDoubleLine rendering as the plain path) so the two look identical; the
+-- only additions are a MinimalScrollBar down the right edge and a search box
+-- along the bottom, both sitting in padding the tooltip reserves for them.
+-- GameTooltip_OnHide clears that padding, so it is re-applied on every render.
+-- MinimalScrollBar is an 8px track but its stepper arrows are 17px wide,
+-- centred on it; the column must fit the arrows, not the track.
+local INTERACTIVE_RIGHT_PADDING = 24
+local INTERACTIVE_BAR_INSET = 10
+local INTERACTIVE_BOTTOM_PADDING = 26
+local INTERACTIVE_MIN_WIDTH = 240
+local syncingScrollBar = false
+local AnchorInteractiveTooltip
+
+local function ScrollMaximum(frame)
+    return math.max(0, (frame.matchCount or 0) - MAX_VISIBLE_WARE_ROWS)
+end
+
+local function SyncScrollBar(frame)
+    local bar = frame.scrollBar
+    local maximum = ScrollMaximum(frame)
+    if maximum == 0 then
+        bar:Hide()
+        return
     end
+    bar:Show()
+    syncingScrollBar = true
+    bar:SetVisibleExtentPercentage(MAX_VISIBLE_WARE_ROWS / frame.matchCount)
+    bar:SetPanExtentPercentage(1 / maximum)
+    bar:SetScrollPercentage(frame.scrollOffset / maximum, ScrollBoxConstants.NoScrollInterpolation)
+    syncingScrollBar = false
+end
+
+-- Emits the header plus the matching wares from `first` (1-based match
+-- index) for up to `limit` rows, with the plain tooltip's exact calls.
+-- `everyWare` ignores the search query (the width-measuring pass).
+local function AddInteractiveLines(frame, vendor, first, limit, everyWare)
+    frame:ClearLines()
+    AddVendorHeader(frame, vendor)
+    frame:AddLine(" ")
+    frame:AddLine("Wares:", 1, 0.82, 0)
+    local matchIndex = 0
+    local shown = 0
+    for _, item in ipairs(vendor.items) do
+        local itemName = C_Item.GetItemInfo(item.id)
+        if everyWare or ItemMatchesTooltipSearch(item, itemName) then
+            matchIndex = matchIndex + 1
+            if matchIndex >= first and shown < limit then
+                shown = shown + 1
+                local cost = FormatCost(item)
+                if cost then
+                    frame:AddDoubleLine(itemName or "...", cost, 1, 1, 1, 1, 1, 1)
+                else
+                    frame:AddLine(itemName or "...", 1, 1, 1)
+                end
+            end
+        end
+    end
+    if matchIndex == 0 then frame:AddLine("No matching wares", 0.7, 0.7, 0.7) end
 end
 
 local function RenderInteractiveTooltip(vendor)
     local frame = interactiveTooltip
     local pending = false
     local matches = 0
+    local resolved = 0
     for _, item in ipairs(vendor.items) do
         local itemName = C_Item.GetItemInfo(item.id)
-        if not itemName then pending = true end
+        if itemName then resolved = resolved + 1 else pending = true end
         if ItemMatchesTooltipSearch(item, itemName) then
             matches = matches + 1
         end
     end
-
-    frame.title:SetText(vendor.name)
-    frame.title:Show()
-    local location = vendor.subzone or vendor.zone
-    if vendor.subzone and vendor.zone then location = vendor.subzone .. ", " .. vendor.zone end
-    if location then
-        frame.location:SetText(location)
-        frame.location:Show()
-    else
-        frame.location:Hide()
-    end
     frame.matchCount = matches
-    frame.scrollOffset = math.min(frame.scrollOffset or 0, math.max(0, matches - MAX_VISIBLE_WARE_ROWS))
+    frame.scrollOffset = math.min(frame.scrollOffset or 0, ScrollMaximum(frame))
+    local scrollable = matches > MAX_VISIBLE_WARE_ROWS
+    local rightPadding = scrollable and INTERACTIVE_RIGHT_PADDING or 0
 
-    local matchIndex = 0
-    local visibleIndex = 0
-    for _, item in ipairs(vendor.items) do
-        local itemName = C_Item.GetItemInfo(item.id)
-        if ItemMatchesTooltipSearch(item, itemName) then
-            matchIndex = matchIndex + 1
-            if matchIndex > frame.scrollOffset and visibleIndex < MAX_VISIBLE_WARE_ROWS then
-                visibleIndex = visibleIndex + 1
-                local cost = FormatCost(item)
-                local text = itemName or "..."
-                if cost then text = text .. "  " .. cost end
-                SetInteractiveLine(frame.lines[visibleIndex], text, visibleIndex)
-            end
+    -- The window of 15 names changes width as it scrolls, and a tooltip that
+    -- resizes under the cursor is hard to scroll and can slide out from under
+    -- it (which closes it). So the width is measured from a full render of
+    -- EVERY ware (query ignored, so a search typed mid-load cannot freeze a
+    -- narrow width) and frozen for the vendor. It is re-measured only when
+    -- another name has resolved since the last measure — "..." is narrower
+    -- than the real name — so an item that never loads cannot keep the
+    -- measure running, and a zero width (rect not yet valid) is not recorded,
+    -- so the next render measures again instead of freezing the floor.
+    if frame.measuredVendor ~= vendor or frame.measuredResolved ~= resolved then
+        AddInteractiveLines(frame, vendor, 1, math.huge, true)
+        -- Reset the minimum before measuring or the previous vendor's width
+        -- would floor this one's measurement.
+        frame:SetMinimumWidth(INTERACTIVE_MIN_WIDTH)
+        frame:SetPadding(rightPadding, INTERACTIVE_BOTTOM_PADDING)
+        frame:Show()
+        local width = frame:GetWidth()
+        if width > 0 then
+            frame.measuredWidth = math.max(INTERACTIVE_MIN_WIDTH, width)
+            frame.measuredVendor = vendor
+            frame.measuredResolved = resolved
+        else
+            frame.measuredWidth = INTERACTIVE_MIN_WIDTH
+            frame.measuredVendor = nil
         end
     end
-    if matches == 0 then
-        SetInteractiveLine(frame.lines[1], "No matching wares", 1)
-        visibleIndex = 1
+
+    AddInteractiveLines(frame, vendor, frame.scrollOffset + 1, MAX_VISIBLE_WARE_ROWS)
+    frame:SetMinimumWidth(frame.measuredWidth)
+    frame:SetPadding(rightPadding, INTERACTIVE_BOTTOM_PADDING)
+    frame:Show()
+    -- Anchor once per hover, and only from a usable height: a zero height
+    -- (rect not valid yet) would read as "room below" for every pin and hand
+    -- the low-pin clamping bug back, so the pin is held until a later render.
+    -- Never re-anchor on later renders — a narrowing search shortens the
+    -- tooltip and a flip would jump it out from under the cursor.
+    if frame.anchorPin and frame:GetHeight() > 0 then
+        AnchorInteractiveTooltip(frame, frame.anchorPin)
+        frame.anchorPin = nil
     end
-    for index = visibleIndex + 1, MAX_VISIBLE_WARE_ROWS do
-        SetInteractiveLine(frame.lines[index], nil)
-    end
+    SyncScrollBar(frame)
     return pending
+end
+
+-- Butts the tooltip edge-to-edge against the pin so the cursor can cross
+-- onto it (a corner touch closes on the crossing check). The tooltip is
+-- ~300px tall, so for a pin low on the map hanging down from the pin's top
+-- would overhang the screen and SetClampedToScreen would slide it up off
+-- the pin; in that case it rises from the pin's bottom instead. Decided
+-- after the first render, when the tooltip's height is known. The vertical
+-- test is in screen pixels because the pin lives on the scaled map canvas
+-- (HandyNotes pins scale 1.0-1.2x with zoom); the left/right flip compares
+-- raw centres, which only shifts the flip point a little right of centre
+-- where either side has room.
+AnchorInteractiveTooltip = function(frame, pin)
+    local flip = pin:GetCenter() > UIParent:GetCenter()
+    local hangsDown = true
+    local pinTop = pin:GetTop()
+    if pinTop then
+        local roomBelow = pinTop * pin:GetEffectiveScale()
+        hangsDown = roomBelow >= frame:GetHeight() * frame:GetEffectiveScale()
+    end
+    frame:ClearAllPoints()
+    if hangsDown then
+        frame:SetPoint(flip and "TOPRIGHT" or "TOPLEFT", pin, flip and "TOPLEFT" or "TOPRIGHT", 0, 0)
+    else
+        frame:SetPoint(flip and "BOTTOMRIGHT" or "BOTTOMLEFT", pin, flip and "BOTTOMLEFT" or "BOTTOMRIGHT", 0, 0)
+    end
 end
 
 local function CloseInteractiveTooltip()
@@ -805,34 +891,47 @@ local function CloseAllVendorTooltips()
     CloseInteractiveTooltip()
 end
 
+-- Holding the scroll bar thumb fires OnScroll every frame; offsets are whole
+-- rows, so most of those resolve to the offset already shown and must not
+-- re-render.
+local function SetInteractiveScrollOffset(offset)
+    local frame = interactiveTooltip
+    offset = math.max(0, math.min(ScrollMaximum(frame), offset))
+    if offset == frame.scrollOffset then return end
+    frame.scrollOffset = offset
+    if currentHover and currentHover.kind == "interactive" then
+        RenderInteractiveTooltip(currentHover.vendor)
+    end
+end
+
 local function EnsureInteractiveTooltip()
     if interactiveTooltip then return interactiveTooltip end
-    local frame = CreateFrame("Frame", "HandyNotesHomesteadWaresTooltip", UIParent, "TooltipBackdropTemplate")
+    local frame = CreateFrame("GameTooltip", "HandyNotesHomesteadWaresTooltip", UIParent, "GameTooltipTemplate")
     frame:SetFrameStrata("TOOLTIP")
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
     frame:EnableMouseWheel(true)
     frame:EnableKeyboard(true)
-    frame:SetSize(340, 68 + MAX_VISIBLE_WARE_ROWS * WARE_ROW_HEIGHT + 28)
-    frame.title = frame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -10)
-    frame.location = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    frame.location:SetPoint("TOPLEFT", frame.title, "BOTTOMLEFT", 0, -3)
-    frame.lines = {}
-    for index = 1, MAX_VISIBLE_WARE_ROWS do
-        frame.lines[index] = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    end
-    tooltipSearchBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+
+    local bar = CreateFrame("EventFrame", nil, frame, "MinimalScrollBar")
+    bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -INTERACTIVE_BAR_INSET, -8)
+    bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -INTERACTIVE_BAR_INSET, INTERACTIVE_BOTTOM_PADDING + 4)
+    bar:Init(1, 1)
+    bar:RegisterCallback(BaseScrollBoxEvents.OnScroll, function(_, percentage)
+        if syncingScrollBar then return end
+        SetInteractiveScrollOffset(math.floor(percentage * ScrollMaximum(frame) + 0.5))
+    end, frame)
+    frame.scrollBar = bar
+
+    tooltipSearchBox = CreateFrame("EditBox", nil, frame, "SearchBoxTemplate")
     tooltipSearchBox:SetAutoFocus(false)
     tooltipSearchBox:SetMaxLetters(50)
-    frame.searchLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    frame.searchLabel:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 8)
-    frame.searchLabel:SetText("Search wares...")
-    frame.searchLabel:Show()
-    tooltipSearchBox:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 112, 5)
-    tooltipSearchBox:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -10, 5)
+    tooltipSearchBox:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 6)
+    tooltipSearchBox:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -12, 6)
     tooltipSearchBox:SetHeight(20)
+    tooltipSearchBox.Instructions:SetText("Search wares...")
     tooltipSearchBox:SetScript("OnTextChanged", function(self)
+        SearchBoxTemplate_OnTextChanged(self)
         if suppressTooltipSearchChanged then return end
         if tooltipSearchTimer then tooltipSearchTimer:Cancel() end
         local token = currentHover
@@ -858,13 +957,19 @@ local function EnsureInteractiveTooltip()
     tooltipSearchBox:SetScript("OnEnterPressed", function(self)
         self:ClearFocus()
     end)
+    -- Focus was holding the tooltip open (see HNH:OnLeave); when it goes and
+    -- the cursor is no longer on the tooltip or its pin, close as a leave would.
+    tooltipSearchBox:SetScript("OnEditFocusLost", function(self)
+        SearchBoxTemplate_OnEditFocusLost(self)
+        local token = currentHover
+        if not token or token.kind ~= "interactive" or not interactiveTooltip:IsShown() then return end
+        if interactiveTooltip:IsMouseOver() then return end
+        if token.pin.IsMouseOver and token.pin:IsMouseOver() then return end
+        currentHover = nil
+        CloseInteractiveTooltip()
+    end)
     frame:SetScript("OnMouseWheel", function(_, delta)
-        local maximum = math.max(0, (frame.matchCount or 0) - MAX_VISIBLE_WARE_ROWS)
-        local nextOffset = math.max(0, math.min(maximum, (frame.scrollOffset or 0) - delta))
-        frame.scrollOffset = nextOffset
-        if currentHover and currentHover.kind == "interactive" then
-            RenderInteractiveTooltip(currentHover.vendor)
-        end
+        SetInteractiveScrollOffset((frame.scrollOffset or 0) - delta)
     end)
     frame:SetScript("OnKeyDown", function(self, key)
         self:SetPropagateKeyboardInput(key ~= "ESCAPE")
@@ -940,10 +1045,16 @@ function HNH:OnEnter(uiMapID, coord)
         suppressTooltipSearchChanged = false
         frame.scrollOffset = 0
         tooltipSearchBox:Show()
+        -- ANCHOR_LEFT/RIGHT would hang the tooltip off the pin's corner with
+        -- only a corner touch, so the cursor leaves the pin into empty space
+        -- and the crossing closes it. Own the pin for GameTooltip's lifecycle
+        -- but butt the tooltip against the pin's edge so the cursor can cross.
+        frame:SetOwner(self, "ANCHOR_NONE")
         frame:ClearAllPoints()
-        frame:SetPoint(self:GetCenter() > UIParent:GetCenter() and "TOPRIGHT" or "TOPLEFT", self,
-            self:GetCenter() > UIParent:GetCenter() and "TOPLEFT" or "TOPRIGHT", 0, 0)
-        frame:Show()
+        local flip = self:GetCenter() > UIParent:GetCenter()
+        frame:SetPoint(flip and "TOPRIGHT" or "TOPLEFT", self, flip and "TOPLEFT" or "TOPRIGHT", 0, 0)
+        -- Re-anchored by room once the first render has given it a height.
+        frame.anchorPin = self
         RefreshVendorItems(currentHover, RenderInteractiveTooltip)
     else
         CloseInteractiveTooltip()
@@ -974,6 +1085,10 @@ function HNH:OnLeave()
     -- luacheck: ignore 113
     C_Timer.After(0, function()
         if currentHover ~= token then return end
+        -- A search that narrows the list shrinks the tooltip, which can move
+        -- the search box out from under a stationary cursor mid-typing. While
+        -- the box has focus the tooltip stays; OnEditFocusLost re-checks.
+        if tooltipSearchBox:HasFocus() then return end
         if interactiveTooltip:IsMouseOver() then return end
         if token.pin.IsMouseOver and token.pin:IsMouseOver() then return end
         currentHover = nil

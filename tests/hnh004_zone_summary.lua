@@ -184,15 +184,19 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         function frame:SetWidth(value) self.width = value end
         function frame:SetHeight(value) self.height = value end
         function frame:SetSize(width, height) self.width = width; self.height = height end
-        function frame:GetWidth() return self.width or 0 end
-        function frame:GetHeight() return self.height or 0 end
+        -- A shown tooltip has a real width; 0 is the "rect not valid yet" case tests set explicitly.
+        function frame:GetWidth() return self.width or (frameType == "GameTooltip" and 300) or 0 end
+        -- A shown tooltip has a real height; 0 is the "rect not valid yet" case tests set explicitly.
+        function frame:GetHeight() return self.height or (frameType == "GameTooltip" and 300) or 0 end
+        function frame:GetTop() return self.top end
+        function frame:GetEffectiveScale() return self.effectiveScale or 1 end
         function frame:Show() self.shown = true; if self.scripts.OnShow then self.scripts.OnShow(self) end end
         function frame:Hide() self.shown = false; if self.scripts.OnHide then self.scripts.OnHide(self) end end
         function frame:IsShown() return self.shown end
         function frame:IsMouseOver() return self.mouseOver end
         function frame:SetOwner(owner) self.owner = owner end
         function frame:GetOwner() return self.owner end
-        function frame:ClearLines() self.lines = {} end
+        function frame:ClearLines() self.lines = {}; self.clearCalls = (self.clearCalls or 0) + 1 end
         function frame:SetText(text) self.lines = { text } end
         function frame:AddLine(text) self.lines[#self.lines + 1] = text end
         function frame:AddDoubleLine(left, right) self.lines[#self.lines + 1] = left .. right end
@@ -200,6 +204,23 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         function frame:SetVerticalScroll(value) self.verticalScroll = value end
         function frame:GetVerticalScroll() return self.verticalScroll or 0 end
         function frame:GetVerticalScrollRange() return self.verticalScrollRange or 0 end
+        function frame:SetPadding(right, bottom) self.padding = { right = right, bottom = bottom } end
+        function frame:SetMinimumWidth(width) self.minimumWidth = width end
+        if template == "MinimalScrollBar" then
+            function frame:Init(visibleExtent, panExtent)
+                self.visibleExtent = visibleExtent; self.panExtent = panExtent; self.scrollPercentage = 0
+            end
+            function frame:SetVisibleExtentPercentage(value) self.visibleExtent = value end
+            function frame:SetPanExtentPercentage(value) self.panExtent = value end
+            function frame:RegisterCallback(event, callback, owner) self.callbacks = self.callbacks or {}; self.callbacks[event] = { callback, owner } end
+            -- Like Blizzard's ScrollBarMixin, every SetScrollPercentage fires OnScroll.
+            function frame:SetScrollPercentage(value)
+                self.scrollPercentage = value
+                self.scrollSets = (self.scrollSets or 0) + 1
+                local entry = self.callbacks and self.callbacks.OnScroll
+                if entry then entry[1](entry[2], value) end
+            end
+        end
         function frame:CreateFontString()
             local line = { shown = false }
             self.fontStrings[#self.fontStrings + 1] = line
@@ -213,6 +234,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         if frameType == "EditBox" then
             editBoxes[#editBoxes + 1] = frame
             function frame:SetAutoFocus() end
+            frame.Instructions = { SetText = function(instructions, text) instructions.text = text end }
             function frame:SetMaxLetters() end
             function frame:SetText(text)
                 self.text = text
@@ -221,6 +243,8 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
             function frame:GetText() return self.text or "" end
             function frame:HasFocus() return self.focused end
             function frame:ClearFocus()
+                -- Like the client: focus-lost fires only if the box had focus.
+                if not self.focused then return end
                 self.focused = nil
                 if self.scripts.OnEditFocusLost then self.scripts.OnEditFocusLost(self) end
             end
@@ -228,6 +252,10 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         return frame
     end
     _G.GameTooltip = tooltip
+    _G.BaseScrollBoxEvents = { OnScroll = "OnScroll" }
+    _G.ScrollBoxConstants = { NoScrollInterpolation = true }
+    _G.SearchBoxTemplate_OnTextChanged = function(box) box.templateTextChanged = (box.templateTextChanged or 0) + 1 end
+    _G.SearchBoxTemplate_OnEditFocusLost = function(box) box.templateFocusLost = (box.templateFocusLost or 0) + 1 end
     function tooltip:SetOwner(owner) self.owner = owner end
     function tooltip:IsOwned(owner) return self.owner == owner end
     function tooltip:SetText(text) self.lines = { text } end
@@ -616,6 +644,7 @@ end
 
 local function visibleFrameText(frame)
     local lines = {}
+    for _, line in ipairs(frame.lines or {}) do lines[#lines + 1] = line end
     for _, line in ipairs(frame.fontStrings) do
         if line.shown and line.text then lines[#lines + 1] = line.text end
     end
@@ -691,23 +720,32 @@ local function runVendorTooltipSearch()
     local runtime = {
         loadRuntime({}, "Alliance", nil, data, nil, nil, nil, nil, itemNames, currencyNames),
     }
-    local handler, tooltip, _, _, _, _, _, restore, _, _, _, editBoxes, timers, createdFrames, hookCount = unpack(runtime)
+    local handler, tooltip, _, _, _, _, _, restore, _, setItemCached, itemLoadCallbacks, editBoxes, timers, createdFrames, hookCount = unpack(runtime)
     local pin = _G.CreateFrame("Button")
     handler.OnEnter(pin, 101, 10001000)
     check(hookCount() == 2, "the first long hover must install exactly its pin-hide and map-hide teardown hooks")
     local interactive = findCreatedFrame(createdFrames, "HandyNotesHomesteadWaresTooltip")
-    check(interactive and interactive.template == "TooltipBackdropTemplate" and interactive.mouseEnabled,
-        "16 wares must use HNH's interactive tooltip-styled frame")
+    check(interactive and interactive.frameType == "GameTooltip" and interactive.template == "GameTooltipTemplate"
+        and interactive.mouseEnabled, "16 wares must use HNH's own GameTooltip so it looks like the plain one")
+    check(interactive.owner == pin, "interactive tooltip must be owned by its pin")
+    local anchor = interactive.points and interactive.points[1]
+    check(anchor and anchor[1] == "TOPLEFT" and anchor[2] == pin and anchor[3] == "TOPRIGHT",
+        "interactive tooltip must butt against the pin's edge so the cursor can cross onto it")
+    check(#interactive.points == 1 and interactive.anchorPin == nil,
+        "the anchor is decided once, after the first render, not on every render")
     check(interactive.strata == "TOOLTIP" and interactive.clamped and interactive.shown,
         "interactive frame must be tooltip-strata, clamped, and visible")
     local scrolling
     for _, created in ipairs(createdFrames) do
-        if created.frameType == "ScrollFrame"
-            or (created.template and string.find(created.template, "Scroll", 1, true)) then
-            scrolling = created
-        end
+        if created.frameType == "ScrollFrame" then scrolling = created end
     end
-    check(not scrolling, "interactive tooltip must use a fixed recycled line pool, not a scroll frame")
+    check(not scrolling, "interactive tooltip must render a window of tooltip lines, not a scroll frame")
+    local scrollBar = interactive.scrollBar
+    check(scrollBar and scrollBar.template == "MinimalScrollBar" and scrollBar.parent == interactive,
+        "interactive tooltip must carry a MinimalScrollBar")
+    check(scrollBar.shown and interactive.padding and interactive.padding.right > 0 and interactive.padding.bottom > 0,
+        "a scrollable list must show the bar and reserve tooltip padding for bar and search box")
+    check(interactive.minimumWidth and interactive.minimumWidth > 0, "interactive tooltip must pin a minimum width")
     check(#editBoxes == 1, "interactive path must create one reusable search input")
     check(tooltip.hookInstallations == 0, "interactive path must not hook the shared GameTooltip")
 
@@ -716,22 +754,62 @@ local function runVendorTooltipSearch()
         "search input must stay at the bottom of the interactive frame")
     check(string.find(visibleFrameText(interactive), "Search vendor", 1, true),
         "interactive tooltip must render its vendor header")
-    check(string.find(visibleFrameText(interactive), "Search wares...", 1, true),
-        "interactive tooltip must label its bottom search box")
+    check(searchBox.template == "SearchBoxTemplate" and searchBox.Instructions.text == "Search wares...",
+        "search box must be Blizzard's SearchBoxTemplate with HNH's placeholder")
+    check(string.find(visibleFrameText(interactive), "Wares:", 1, true),
+        "interactive tooltip must render the same Wares: header as the plain tooltip")
     check(pin.scripts.OnHide, "interactive tooltip must close when its pin hides")
     interactive.scripts.OnMouseWheel(interactive, -1)
     check(interactive.scrollOffset == 1 and string.find(visibleFrameText(interactive), "Ware 16", 1, true),
         "a 16-item vendor must show ware 16 after scrolling to the end")
+    check(scrollBar.scrollPercentage == 1, "wheel scrolling must move the scroll bar thumb")
+    -- Width is measured from one full-list render per vendor (2 ClearLines on
+    -- the first render), then frozen: each wheel tick is a single window render
+    -- that re-applies the measured width rather than re-measuring.
+    check(interactive.clearCalls == 3, "first render measures once; a wheel tick renders once, got " .. tostring(interactive.clearCalls))
+    interactive.width = 333
+    interactive.scripts.OnMouseWheel(interactive, -1)
+    check(interactive.clearCalls == 3 and interactive.scrollOffset == 1,
+        "a wheel tick already at the end must not re-render")
+    local setsBefore = scrollBar.scrollSets
+    scrollBar:SetScrollPercentage(0)
+    check(interactive.scrollOffset == 0 and string.find(visibleFrameText(interactive), "Ware 1", 1, true)
+        and scrollBar.scrollSets == setsBefore + 2,
+        "dragging the scroll bar must re-render the window once (the nested OnScroll from the bar sync is a no-op)")
+    check(interactive.clearCalls == 4 and interactive.minimumWidth == 300,
+        "scrolling must reuse the width measured at open, not re-measure")
+    -- Holding the thumb fires OnScroll every frame at the same percentage.
+    for _ = 1, 30 do scrollBar:SetScrollPercentage(0) end
+    check(interactive.clearCalls == 4 and interactive.scrollOffset == 0,
+        "an OnScroll that resolves to the current row offset must not re-render")
+    interactive.scripts.OnMouseWheel(interactive, 1)
+    check(interactive.clearCalls == 4, "a wheel tick already at the top must not re-render")
+    check(interactive.padding.right >= 24,
+        "right padding must fit MinimalScrollBar's 17px stepper arrows, not just its 8px track")
 
     interactive.mouseOver = true
     handler.OnLeave(pin, 101, 10001000)
     check(interactive.shown, "pin leave must keep the frame open while the cursor crosses onto it")
     interactive.mouseOver = nil
-    check(interactive.scripts.OnLeave, "interactive frame must close when its own cursor leaves")
+    -- A narrowing search shrinks the tooltip away from a stationary cursor;
+    -- focus in the search box must hold it open until focus is gone.
     searchBox.focused = true
     interactive.scripts.OnLeave(interactive)
+    check(interactive.shown and searchBox.focused, "a focused search box must hold the tooltip open through a leave")
+    searchBox:ClearFocus()
+    check(not interactive.shown and searchBox.templateFocusLost == 1,
+        "losing search focus off the tooltip must close it via the template's own focus-lost handler")
+    handler.OnEnter(pin, 101, 10001000)
+    searchBox.focused = true
+    interactive.mouseOver = true
+    searchBox:ClearFocus()
+    check(interactive.shown, "losing search focus while still over the tooltip must leave it open")
+    interactive.mouseOver = nil
+    check(interactive.scripts.OnLeave, "interactive frame must close when its own cursor leaves")
+    searchBox.focused = nil
+    interactive.scripts.OnLeave(interactive)
     check(not interactive.shown and not searchBox.focused,
-        "interactive frame leave must close the frame and clear search focus")
+        "interactive frame leave without search focus must close the frame")
 
     handler.OnEnter(pin, 101, 10001000)
     searchBox.focused = true
@@ -778,11 +856,14 @@ local function runVendorTooltipSearch()
 
     handler.OnEnter(pin, 101, 10001000)
     searchBox.focused = true
+    interactive.mouseOver = true -- the cursor is on the box when Enter is pressed
     searchBox.scripts.OnEnterPressed(searchBox)
-    check(not searchBox.focused, "Enter must drop search focus")
+    check(not searchBox.focused and interactive.shown, "Enter must drop search focus and keep the tooltip open")
 
     searchBox:SetText("trad")
     searchBox:SetText("tender")
+    check(searchBox.templateTextChanged and searchBox.templateTextChanged >= 2,
+        "search box text changes must still run SearchBoxTemplate's own handler (icon/clear button)")
     check(#timers == 3 and timers[2].timer.cancelled, "vendor tooltip search must debounce obsolete queries")
     timers[3].callback()
     local tenderLines = visibleFrameText(interactive)
@@ -799,6 +880,8 @@ local function runVendorTooltipSearch()
     timers[5].callback()
     check(string.find(visibleFrameText(interactive), "No matching wares", 1, true),
         "no-match query must report the empty result")
+    check(not scrollBar.shown and interactive.padding.right == 0,
+        "a list that fits must hide the scroll bar and drop its padding")
 
     handler.OnEnter(retargetPin, 101, 20002000)
     check(interactive.shown and string.find(visibleFrameText(interactive), "Retarget vendor", 1, true),
@@ -809,10 +892,87 @@ local function runVendorTooltipSearch()
     for _ = 1, 40 do interactive.scripts.OnMouseWheel(interactive, -1) end
     check(interactive.scrollOffset == 25 and string.find(visibleFrameText(interactive), "Ware 40", 1, true),
         "a 40-item vendor must show ware 40 after scrolling to the end")
+
+    -- A pin low on the screen: hanging ~300px down from its top would overhang
+    -- the screen and clamping would slide the tooltip off the pin. It must
+    -- rise from the pin's bottom instead, in screen pixels (canvas pins are scaled).
+    local lowPin = _G.CreateFrame("Button")
+    -- 400 pin units at scale 0.5 = 200 screen px: unscaled it would (wrongly) look like room for 300.
+    lowPin.top = 400; lowPin.effectiveScale = 0.5
+    interactive.height = 300
+    handler.OnEnter(lowPin, 101, 40004000)
+    anchor = interactive.points[1]
+    check(#interactive.points == 1 and anchor[1] == "BOTTOMLEFT" and anchor[2] == lowPin and anchor[3] == "BOTTOMRIGHT",
+        "a pin without room below (in screen pixels, pin scale applied) must anchor the tooltip rising from its bottom")
+    -- 350 screen px of room for a 300-unit tooltip that is drawn at scale 1.2 = 360 px: still no room.
+    lowPin.top = 350; lowPin.effectiveScale = 1
+    interactive.effectiveScale = 1.2
+    handler.OnEnter(lowPin, 101, 40004000)
+    check(interactive.points[1][1] == "BOTTOMLEFT", "the tooltip's own scale must count toward the height it needs")
+    interactive.effectiveScale = 1
+    handler.OnEnter(lowPin, 101, 40004000)
+    check(interactive.points[1][1] == "TOPLEFT", "a pin with room below hangs the tooltip down from its top edge")
+    -- Height not valid on the first render: hold the anchor decision for a later render, do not re-anchor after.
+    lowPin.top = 400; lowPin.effectiveScale = 0.5
+    interactive.height = 0
+    handler.OnEnter(lowPin, 101, 40004000)
+    check(interactive.anchorPin == lowPin and interactive.points[1][1] == "TOPLEFT",
+        "a zero height must not decide the anchor; the pin is held for a later render")
+    interactive.height = 300
+    interactive.scripts.OnMouseWheel(interactive, -1)
+    check(interactive.anchorPin == nil and interactive.points[1][1] == "BOTTOMLEFT",
+        "the first render with a usable height anchors by room")
+    interactive.scripts.OnMouseWheel(interactive, -1)
+    check(#interactive.points == 1, "later renders must not re-anchor")
+
+    -- Width measure: query-independent and keyed on resolved names.
+    interactive.width = 333
+    handler.OnEnter(retargetPin, 101, 20002000)
+    check(interactive.minimumWidth == 333, "a fresh vendor hover re-measures the width")
+    local clears = interactive.clearCalls
+    searchBox:SetText("nothing-matches")
+    timers[#timers].callback()
+    check(string.find(visibleFrameText(interactive), "No matching wares", 1, true)
+        and interactive.minimumWidth == 333 and interactive.clearCalls == clears + 1,
+        "a search must neither re-measure nor narrow the frozen width")
+    interactive.width = 0
+    handler.OnEnter(fortyPin, 101, 40004000)
+    check(interactive.minimumWidth == 240 and interactive.measuredVendor == nil,
+        "a zero width measurement must not be frozen; the next render measures again")
+    interactive.width = 400
+    interactive.scripts.OnMouseWheel(interactive, -1)
+    check(interactive.minimumWidth == 400, "after a zero measurement the next render re-measures")
+
+    -- Cold names plus a query typed mid-load: the re-measure when names arrive
+    -- must render every ware, not the matches, or a narrow width is frozen.
+    interactive.width = nil
+    interactive.GetWidth = function(self)
+        local chars = 0
+        for _, line in ipairs(self.lines) do chars = chars + #line end
+        return 200 + chars
+    end
+    handler.OnEnter(retargetPin, 101, 20002000)
+    handler.OnEnter(fortyPin, 101, 40004000)
+    local fullWidth = interactive.minimumWidth
+    setItemCached(false)
+    handler.OnEnter(retargetPin, 101, 20002000)
+    local loadsBefore = #itemLoadCallbacks
+    handler.OnEnter(fortyPin, 101, 40004000)
+    check(#itemLoadCallbacks == loadsBefore + 40, "a cold 40-ware hover registers one load callback per ware")
+    check(interactive.minimumWidth < fullWidth, "unresolved names measure narrower than the real names")
+    searchBox:SetText("ware 4")
+    timers[#timers].callback()
+    setItemCached(true)
+    clears = interactive.clearCalls
+    itemLoadCallbacks[loadsBefore + 1]()
+    check(interactive.clearCalls == clears + 2 and interactive.minimumWidth == fullWidth,
+        "names arriving mid-search must re-measure once from every ware, ignoring the query")
+    itemLoadCallbacks[loadsBefore + 2]()
+    check(interactive.clearCalls == clears + 3, "a further load callback with no new names must not re-measure")
     WorldMapFrame.scripts.OnHide(WorldMapFrame)
     check(not interactive.shown, "hiding the map must close the interactive frame")
-    check(hookCount() == 5,
-        "the interactive path must install one pin-hide hook per hovered pin plus the single shared map-hide hook")
+    check(hookCount() == 6,
+        "the interactive path must install one pin-hide hook per hovered pin (pin, retarget, the short-vendor pin, forty, low) plus the single shared map-hide hook")
     restore()
 end
 

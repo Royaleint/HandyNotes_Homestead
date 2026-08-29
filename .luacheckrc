@@ -43,4 +43,8 @@ read_globals = {
     "MapCanvasDataProviderMixin",
     "GetProfessions",
     "GetProfessionInfo",
+    "BaseScrollBoxEvents",
+    "ScrollBoxConstants",
+    "SearchBoxTemplate_OnTextChanged",
+    "SearchBoxTemplate_OnEditFocusLost",
 }

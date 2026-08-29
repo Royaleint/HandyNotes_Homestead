@@ -567,9 +567,17 @@ end
 -- Tooltip
 -------------------------------------------------------------------------------
 
--- Identity token for the active hover: item-load callbacks compare against
--- it so a callback for a pin the mouse already left does nothing.
+local LONG_WARES_THRESHOLD = 15
+local MAX_VISIBLE_WARE_ROWS = 15
+local WARE_ROW_HEIGHT = 18
 local currentHover
+local plainTooltip
+local interactiveTooltip
+local tooltipSearchBox
+local tooltipSearchTimer
+local tooltipSearchQuery = ""
+local suppressTooltipSearchChanged = false
+local mapHideHookInstalled = false
 
 -- Formats an item's cost for display: gold via GetCoinTextureString (coin
 -- icons built in), currencies via a live GetCurrencyInfo icon lookup with a
@@ -650,12 +658,24 @@ local function FormatCost(item)
     return item.costCache
 end
 
--- Writes the full tooltip body for a vendor. Returns true when at least one
--- item name was still uncached (rendered as "...").
-local function RenderTooltip(vendor)
-    local tooltip = GameTooltip
-    tooltip:SetText(vendor.name)
+local function ItemMatchesTooltipSearch(item, itemName)
+    if tooltipSearchQuery == "" then return true end
+    if itemName and itemName:lower():find(tooltipSearchQuery, 1, true) then
+        return true
+    end
+    if item.currencies then
+        for _, currency in ipairs(item.currencies) do
+            local info = C_CurrencyInfo.GetCurrencyInfo(currency.id)
+            if info and info.name and info.name:lower():find(tooltipSearchQuery, 1, true) then
+                return true
+            end
+        end
+    end
+    return false
+end
 
+local function AddVendorHeader(tooltip, vendor)
+    tooltip:SetText(vendor.name)
     local location = vendor.subzone or vendor.zone
     if vendor.subzone and vendor.zone then
         location = vendor.subzone .. ", " .. vendor.zone
@@ -663,21 +683,39 @@ local function RenderTooltip(vendor)
     if location then
         tooltip:AddLine(location, 0.7, 0.7, 0.7)
     end
+end
+
+local function GetPlainTooltip()
+    if plainTooltip then return plainTooltip end
+    plainTooltip = CreateFrame("GameTooltip", "HandyNotesHomesteadTooltip", UIParent, "GameTooltipTemplate")
+    plainTooltip:SetFrameStrata("TOOLTIP")
+    plainTooltip:SetClampedToScreen(true)
+    return plainTooltip
+end
+
+local function RenderPlainTooltip(tooltip, vendor)
+    tooltip:ClearLines()
+    AddVendorHeader(tooltip, vendor)
 
     local pending = false
     if #vendor.items > 0 then
         tooltip:AddLine(" ")
         tooltip:AddLine("Wares:", 1, 0.82, 0)
+        local matches = 0
         for _, item in ipairs(vendor.items) do
             local itemName = C_Item.GetItemInfo(item.id)
             if not itemName then pending = true end
-            local cost = FormatCost(item)
-            if cost then
-                tooltip:AddDoubleLine(itemName or "...", cost, 1, 1, 1, 1, 1, 1)
-            else
-                tooltip:AddLine(itemName or "...", 1, 1, 1)
+            if ItemMatchesTooltipSearch(item, itemName) then
+                matches = matches + 1
+                local cost = FormatCost(item)
+                if cost then
+                    tooltip:AddDoubleLine(itemName or "...", cost, 1, 1, 1, 1, 1, 1)
+                else
+                    tooltip:AddLine(itemName or "...", 1, 1, 1)
+                end
             end
         end
+        if matches == 0 then tooltip:AddLine("No matching wares", 0.7, 0.7, 0.7) end
     else
         tooltip:AddLine(" ")
         tooltip:AddLine("Wares unknown", 0.7, 0.7, 0.7)
@@ -687,23 +725,198 @@ local function RenderTooltip(vendor)
     return pending
 end
 
+local function SetInteractiveLine(line, text, row)
+    if text then
+        line:ClearAllPoints()
+        line:SetPoint("TOPLEFT", interactiveTooltip, "TOPLEFT", 10, -(60 + (row - 1) * WARE_ROW_HEIGHT))
+        line:SetText(text)
+        line:Show()
+    else
+        line:Hide()
+    end
+end
+
+local function RenderInteractiveTooltip(vendor)
+    local frame = interactiveTooltip
+    local pending = false
+    local matches = 0
+    for _, item in ipairs(vendor.items) do
+        local itemName = C_Item.GetItemInfo(item.id)
+        if not itemName then pending = true end
+        if ItemMatchesTooltipSearch(item, itemName) then
+            matches = matches + 1
+        end
+    end
+
+    frame.title:SetText(vendor.name)
+    frame.title:Show()
+    local location = vendor.subzone or vendor.zone
+    if vendor.subzone and vendor.zone then location = vendor.subzone .. ", " .. vendor.zone end
+    if location then
+        frame.location:SetText(location)
+        frame.location:Show()
+    else
+        frame.location:Hide()
+    end
+    frame.matchCount = matches
+    frame.scrollOffset = math.min(frame.scrollOffset or 0, math.max(0, matches - MAX_VISIBLE_WARE_ROWS))
+
+    local matchIndex = 0
+    local visibleIndex = 0
+    for _, item in ipairs(vendor.items) do
+        local itemName = C_Item.GetItemInfo(item.id)
+        if ItemMatchesTooltipSearch(item, itemName) then
+            matchIndex = matchIndex + 1
+            if matchIndex > frame.scrollOffset and visibleIndex < MAX_VISIBLE_WARE_ROWS then
+                visibleIndex = visibleIndex + 1
+                local cost = FormatCost(item)
+                local text = itemName or "..."
+                if cost then text = text .. "  " .. cost end
+                SetInteractiveLine(frame.lines[visibleIndex], text, visibleIndex)
+            end
+        end
+    end
+    if matches == 0 then
+        SetInteractiveLine(frame.lines[1], "No matching wares", 1)
+        visibleIndex = 1
+    end
+    for index = visibleIndex + 1, MAX_VISIBLE_WARE_ROWS do
+        SetInteractiveLine(frame.lines[index], nil)
+    end
+    return pending
+end
+
+local function CloseInteractiveTooltip()
+    if not interactiveTooltip then return end
+    if tooltipSearchTimer then tooltipSearchTimer:Cancel(); tooltipSearchTimer = nil end
+    tooltipSearchQuery = ""
+    if tooltipSearchBox then
+        tooltipSearchBox:ClearFocus()
+        tooltipSearchBox:Hide()
+    end
+    interactiveTooltip:Hide()
+end
+
+-- Unconditional teardown for the cases where the cursor is gone for good (the
+-- map closed, the pin vanished) rather than merely crossing pin to tooltip.
+local function CloseAllVendorTooltips()
+    currentHover = nil
+    if plainTooltip then plainTooltip:Hide() end
+    CloseInteractiveTooltip()
+end
+
+local function EnsureInteractiveTooltip()
+    if interactiveTooltip then return interactiveTooltip end
+    local frame = CreateFrame("Frame", "HandyNotesHomesteadWaresTooltip", UIParent, "TooltipBackdropTemplate")
+    frame:SetFrameStrata("TOOLTIP")
+    frame:SetClampedToScreen(true)
+    frame:EnableMouse(true)
+    frame:EnableMouseWheel(true)
+    frame:EnableKeyboard(true)
+    frame:SetSize(340, 68 + MAX_VISIBLE_WARE_ROWS * WARE_ROW_HEIGHT + 28)
+    frame.title = frame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -10)
+    frame.location = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    frame.location:SetPoint("TOPLEFT", frame.title, "BOTTOMLEFT", 0, -3)
+    frame.lines = {}
+    for index = 1, MAX_VISIBLE_WARE_ROWS do
+        frame.lines[index] = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    end
+    tooltipSearchBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+    tooltipSearchBox:SetAutoFocus(false)
+    tooltipSearchBox:SetMaxLetters(50)
+    frame.searchLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    frame.searchLabel:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 8)
+    frame.searchLabel:SetText("Search wares...")
+    frame.searchLabel:Show()
+    tooltipSearchBox:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 112, 5)
+    tooltipSearchBox:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -10, 5)
+    tooltipSearchBox:SetHeight(20)
+    tooltipSearchBox:SetScript("OnTextChanged", function(self)
+        if suppressTooltipSearchChanged then return end
+        if tooltipSearchTimer then tooltipSearchTimer:Cancel() end
+        local token = currentHover
+        if not token then return end
+        -- luacheck: ignore 113
+        tooltipSearchTimer = C_Timer.NewTimer(0.3, function()
+            tooltipSearchTimer = nil
+            if currentHover ~= token or not interactiveTooltip:IsShown() then return end
+            tooltipSearchQuery = (self:GetText():match("^%s*(.-)%s*$") or ""):lower()
+            interactiveTooltip.scrollOffset = 0
+            RenderInteractiveTooltip(token.vendor)
+        end)
+    end)
+    tooltipSearchBox:SetScript("OnEscapePressed", function(self)
+        if tooltipSearchTimer then tooltipSearchTimer:Cancel(); tooltipSearchTimer = nil end
+        suppressTooltipSearchChanged = true
+        self:SetText("")
+        suppressTooltipSearchChanged = false
+        tooltipSearchQuery = ""
+        currentHover = nil
+        CloseInteractiveTooltip()
+    end)
+    tooltipSearchBox:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+    end)
+    frame:SetScript("OnMouseWheel", function(_, delta)
+        local maximum = math.max(0, (frame.matchCount or 0) - MAX_VISIBLE_WARE_ROWS)
+        local nextOffset = math.max(0, math.min(maximum, (frame.scrollOffset or 0) - delta))
+        frame.scrollOffset = nextOffset
+        if currentHover and currentHover.kind == "interactive" then
+            RenderInteractiveTooltip(currentHover.vendor)
+        end
+    end)
+    frame:SetScript("OnKeyDown", function(self, key)
+        self:SetPropagateKeyboardInput(key ~= "ESCAPE")
+        if key == "ESCAPE" then
+            currentHover = nil
+            CloseInteractiveTooltip()
+        end
+    end)
+    frame:SetScript("OnLeave", function() HNH:OnLeave() end)
+    interactiveTooltip = frame
+    return frame
+end
+
+local function RefreshVendorItems(token, render)
+    if not render(token.vendor) then return end
+    for _, item in ipairs(token.vendor.items) do
+        if not C_Item.GetItemInfo(item.id) and C_Item.DoesItemExistByID(item.id) then
+            Item:CreateFromItemID(item.id):ContinueOnItemLoad(function()
+                if currentHover == token then render(token.vendor) end
+            end)
+        end
+    end
+end
+
+local function InstallMapHideHook()
+    if mapHideHookInstalled or not WorldMapFrame or not WorldMapFrame.HookScript then return end
+    mapHideHookInstalled = true
+    WorldMapFrame:HookScript("OnHide", CloseAllVendorTooltips)
+end
+
+local function InstallPinHideHook(pin)
+    if pin._hnhPinHideHooked or not pin.HookScript then return end
+    pin._hnhPinHideHooked = true
+    pin:HookScript("OnHide", function()
+        if currentHover and currentHover.pin == pin then CloseAllVendorTooltips() end
+    end)
+end
+
 function HNH:OnEnter(uiMapID, coord)
     local node = NodeAt(uiMapID, coord, UnitFactionGroup("player"))
     if not node then return end
 
-    local tooltip = GameTooltip
-    if self:GetCenter() > UIParent:GetCenter() then
-        tooltip:SetOwner(self, "ANCHOR_LEFT")
-    else
-        tooltip:SetOwner(self, "ANCHOR_RIGHT")
-    end
-
     -- luacheck: ignore 113
     if type(node) == "table" and (node.kind == "zoneSummary" or node.kind == "continentSummary") then
         currentHover = nil
+        CloseInteractiveTooltip()
+        if plainTooltip then plainTooltip:Hide() end
         local summaryMapID = node.mapID or node.zoneMapID
         local summaryMap = C_Map.GetMapInfo(summaryMapID)
         local summaryLabel = node.kind == "continentSummary" and "continent" or "zone"
+        local tooltip = GameTooltip
+        tooltip:SetOwner(self, self:GetCenter() > UIParent:GetCenter() and "ANCHOR_LEFT" or "ANCHOR_RIGHT")
         tooltip:SetText(summaryMap and summaryMap.name or ("Unknown " .. summaryLabel))
         tooltip:AddLine(node.vendorCount .. " vendors")
         tooltip:AddLine("Click to view " .. summaryLabel)
@@ -714,34 +927,58 @@ function HNH:OnEnter(uiMapID, coord)
     local vendor = ns.Vendors[node]
     if not vendor or not HNH:IsProfessionVendorVisible(node) then return end
 
-    local token = {}
-    currentHover = token
-
-    if RenderTooltip(vendor) then
-        -- Uncached names rendered as "...": re-render in place as each item
-        -- load completes, instead of waiting for a re-hover (in-game finding,
-        -- 2026-08-12). ContinueOnItemLoad fires immediately for cached items,
-        -- so only the misses register callbacks.
-        local pin = self
-        for _, item in ipairs(vendor.items) do
-            -- DoesItemExistByID separates "uncached" from "removed from the
-            -- game": ContinueOnItemLoad THROWS on nonexistent itemIDs, and a
-            -- patch can remove a shipped itemID during the stale-data window
-            -- between releases. Nonexistent items keep the plain "..." line.
-            if not C_Item.GetItemInfo(item.id) and C_Item.DoesItemExistByID(item.id) then
-                Item:CreateFromItemID(item.id):ContinueOnItemLoad(function()
-                    if currentHover == token and GameTooltip:IsOwned(pin) then
-                        RenderTooltip(vendor)
-                    end
-                end)
-            end
-        end
+    if #vendor.items > LONG_WARES_THRESHOLD then
+        if plainTooltip then plainTooltip:Hide() end
+        CloseInteractiveTooltip()
+        local frame = EnsureInteractiveTooltip()
+        InstallPinHideHook(self)
+        InstallMapHideHook()
+        currentHover = { kind = "interactive", pin = self, vendor = vendor }
+        tooltipSearchQuery = ""
+        suppressTooltipSearchChanged = true
+        tooltipSearchBox:SetText("")
+        suppressTooltipSearchChanged = false
+        frame.scrollOffset = 0
+        tooltipSearchBox:Show()
+        frame:ClearAllPoints()
+        frame:SetPoint(self:GetCenter() > UIParent:GetCenter() and "TOPRIGHT" or "TOPLEFT", self,
+            self:GetCenter() > UIParent:GetCenter() and "TOPLEFT" or "TOPRIGHT", 0, 0)
+        frame:Show()
+        RefreshVendorItems(currentHover, RenderInteractiveTooltip)
+    else
+        CloseInteractiveTooltip()
+        local plain = GetPlainTooltip()
+        plain:SetOwner(self, self:GetCenter() > UIParent:GetCenter() and "ANCHOR_LEFT" or "ANCHOR_RIGHT")
+        InstallPinHideHook(self)
+        InstallMapHideHook()
+        local token = { kind = "plain", pin = self, vendor = vendor }
+        currentHover = token
+        RefreshVendorItems(token, function(v) return RenderPlainTooltip(plain, v) end)
     end
 end
 
+-- HandyNotes calls this as plugin.OnLeave(pin, uiMapID, coord), so it takes no
+-- arguments of its own: leaving the pin hands off to the tooltip if the cursor
+-- landed on it, and closes otherwise.
 function HNH:OnLeave()
-    currentHover = nil
-    GameTooltip:Hide()
+    local token = currentHover
+    if not token then
+        -- Summary badges use the shared GameTooltip and leave no hover token.
+        GameTooltip:Hide()
+        return
+    end
+    if token.kind == "plain" then
+        CloseAllVendorTooltips()
+        return
+    end
+    -- luacheck: ignore 113
+    C_Timer.After(0, function()
+        if currentHover ~= token then return end
+        if interactiveTooltip:IsMouseOver() then return end
+        if token.pin.IsMouseOver and token.pin:IsMouseOver() then return end
+        currentHover = nil
+        CloseInteractiveTooltip()
+    end)
 end
 
 -- World-map pins only: HandyNotes never wires OnClick on minimap pins.

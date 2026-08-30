@@ -1287,11 +1287,6 @@ local options = {
 
 local VENDOR_PIN_FRAME_LEVEL_TYPE = "PIN_FRAME_LEVEL_QUEST_PING"
 
--- Forward declaration: defined below, in the Gold border section -- but
--- RaiseVendorPins' reset branch (immediately below) needs to call it too,
--- and it's defined after RaiseVendorPins in the file.
-local SetVendorPinBorderShown
-
 -- The frame level is a plain frame property that nothing clears on its own
 -- (HandyNotes releases a pin back to its pool without resetting it, and
 -- reacquiring it for reuse doesn't re-set it either -- see the reset branch
@@ -1315,118 +1310,6 @@ local function RaiseVendorPins()
             pin:UseFrameLevelType("PIN_FRAME_LEVEL_AREA_POI")
             pin:ApplyFrameLevel()
             pin._hnhRaised = nil
-            -- The gold border (see the section below) is HNH-only art --
-            -- hide it, the same way the frame level gets reset, whenever
-            -- this pin is reassigned to a different plugin. Never destroy
-            -- the textures: they're reused if we get the pin back later.
-            if pin._hnhBorder then
-                SetVendorPinBorderShown(pin, false)
-            end
-        end
-    end
-end
-
--------------------------------------------------------------------------------
--- Gold border
---
--- Four one-pixel gold lines just outside the icon, not an art texture --
--- drawn from solid colour so the outline matches the icon at any pin size,
--- rather than relying on a fixed-size Blizzard texture lining up with a
--- much smaller icon. World map only -- minimap pins are untouched.
--------------------------------------------------------------------------------
-
-local VENDOR_PIN_BORDER_R, VENDOR_PIN_BORDER_G, VENDOR_PIN_BORDER_B, VENDOR_PIN_BORDER_A = 1, 0.82, 0, 1 -- standard gold
-local VENDOR_PIN_BORDER_THICKNESS = 1 -- px
-local VENDOR_PIN_BORDER_OUTSET = 1 -- px the border sits outside the icon, so the lines outline it instead of covering it
-
-local function CreateVendorPinBorderLine(pin)
-    local line = pin:CreateTexture(nil, "OVERLAY", nil, 1) -- one sublevel above the icon
-    line:SetColorTexture(VENDOR_PIN_BORDER_R, VENDOR_PIN_BORDER_G, VENDOR_PIN_BORDER_B, VENDOR_PIN_BORDER_A)
-    -- The pin sits at a fractional size and scale, so a one-pixel line whose
-    -- edges snap to the pixel grid can round to nothing on one side and two
-    -- pixels on another. Turn snapping off, as HandyNotes does for the icon.
-    line:SetTexelSnappingBias(0)
-    line:SetSnapToPixelGrid(false)
-    return line
-end
-
--- Creates the four border line textures once per pin FRAME and reuses them
--- after -- HandyNotes pools pin frames across plugins and across our own
--- refreshes, so a given frame only ever needs this once in its whole
--- lifetime, however many times it gets reassigned between plugins.
---
--- Each line is anchored with a SetPoint PAIR against the icon texture
--- (HandyNotesWorldMapPinTemplate always provides `pin.texture` --
--- HandyNotes.xml), not SetAllPoints -- a single line has no "all points" to
--- take, and pairing two corner points is what lets each line stretch to
--- track the icon's own live width or height while staying pinned
--- VENDOR_PIN_BORDER_OUTSET px outside the corresponding edge. If the pin
--- frame is later scaled (MapCanvas's own zoom scaling), the lines scale
--- with it like any other child region -- that's correct, not a bug to guard
--- against.
-local function EnsureVendorPinBorder(pin)
-    local border = pin._hnhBorder
-    if border then return border end
-
-    local texture = pin.texture
-    local outset = VENDOR_PIN_BORDER_OUTSET
-
-    local top = CreateVendorPinBorderLine(pin)
-    top:SetPoint("TOPLEFT", texture, "TOPLEFT", -outset, outset)
-    top:SetPoint("TOPRIGHT", texture, "TOPRIGHT", outset, outset)
-    top:SetHeight(VENDOR_PIN_BORDER_THICKNESS)
-
-    local bottom = CreateVendorPinBorderLine(pin)
-    bottom:SetPoint("BOTTOMLEFT", texture, "BOTTOMLEFT", -outset, -outset)
-    bottom:SetPoint("BOTTOMRIGHT", texture, "BOTTOMRIGHT", outset, -outset)
-    bottom:SetHeight(VENDOR_PIN_BORDER_THICKNESS)
-
-    local left = CreateVendorPinBorderLine(pin)
-    left:SetPoint("TOPLEFT", texture, "TOPLEFT", -outset, outset)
-    left:SetPoint("BOTTOMLEFT", texture, "BOTTOMLEFT", -outset, -outset)
-    left:SetWidth(VENDOR_PIN_BORDER_THICKNESS)
-
-    local right = CreateVendorPinBorderLine(pin)
-    right:SetPoint("TOPRIGHT", texture, "TOPRIGHT", outset, outset)
-    right:SetPoint("BOTTOMRIGHT", texture, "BOTTOMRIGHT", outset, -outset)
-    right:SetWidth(VENDOR_PIN_BORDER_THICKNESS)
-
-    border = { top = top, bottom = bottom, left = left, right = right }
-    pin._hnhBorder = border
-    return border
-end
-
--- Shared by ShowVendorPinBorders below and RaiseVendorPins' reset branch
--- above -- the one place that shows or hides all four lines together, so
--- neither call site can accidentally touch only some of them.
-SetVendorPinBorderShown = function(pin, shown)
-    local border = pin._hnhBorder
-    if not border then return end
-    if shown then
-        border.top:Show()
-        border.bottom:Show()
-        border.left:Show()
-        border.right:Show()
-    else
-        border.top:Hide()
-        border.bottom:Hide()
-        border.left:Hide()
-        border.right:Hide()
-    end
-end
-
--- Runs only on HNH's OWN RefreshPlugin call, same as
--- ApplyPinPlacementAdjustments above and for the same reason: HandyNotes
--- re-acquires every one of our pins fresh on our own refresh, so this is
--- the only point that needs to (re)show the border. RaiseVendorPins' reset
--- branch above handles hiding it again if HandyNotes later reassigns the
--- pin to a different plugin.
-local function ShowVendorPinBorders()
-    if not WorldMapFrame or not WorldMapFrame.EnumeratePinsByTemplate then return end
-    for pin in WorldMapFrame:EnumeratePinsByTemplate("HandyNotesWorldMapPinTemplate") do
-        if pin.pluginName == PLUGIN_NAME and pin.CreateTexture then
-            EnsureVendorPinBorder(pin)
-            SetVendorPinBorderShown(pin, true)
         end
     end
 end
@@ -1435,15 +1318,13 @@ end
 -- Pin size
 --
 -- 1px larger than HandyNotes' own default, so a vendor pin reads a little
--- more clearly against the surrounding map icons. The border above tracks
--- automatically -- it's SetAllPoints to the icon texture, which HandyNotes
--- itself resizes along with the pin frame.
+-- more clearly against the surrounding map icons.
 -------------------------------------------------------------------------------
 
 local VENDOR_PIN_SIZE_BONUS = 1 -- extra pixels added to HandyNotes' own pin size
 
--- Runs only on HNH's OWN RefreshPlugin call, alongside ShowVendorPinBorders
--- above and under the same pluginName guard. No reset step needed on pool
+-- Runs only on HNH's OWN RefreshPlugin call (see the pluginName guard in
+-- InstallVendorPinLayering's hook below). No reset step needed on pool
 -- reuse: HandyNotesWorldMapPinMixin:OnAcquired sets
 -- `local size = 12 * db.icon_scale * scale; self:SetSize(size, size)` on
 -- EVERY acquire (HandyNotes.lua:381-382), and RefreshPlugin removes and
@@ -1451,8 +1332,8 @@ local VENDOR_PIN_SIZE_BONUS = 1 -- extra pixels added to HandyNotes' own pin siz
 -- so by the time this runs, GetSize() always reads HandyNotes' own fresh
 -- default, never a size we already grew. Reading it and adding
 -- VENDOR_PIN_SIZE_BONUS once is therefore safe with nothing to undo first,
--- and safe to run exactly once per our own refresh (this pass, like the
--- border pass, only ever runs once per RefreshPlugin call for HNH).
+-- and safe to run exactly once per our own refresh (this pass only ever
+-- runs once per RefreshPlugin call for HNH).
 local function GrowVendorPinSize()
     if not WorldMapFrame or not WorldMapFrame.EnumeratePinsByTemplate then return end
     for pin in WorldMapFrame:EnumeratePinsByTemplate("HandyNotesWorldMapPinTemplate") do
@@ -1479,8 +1360,8 @@ end
 -- left out -- each of those needs its own availability/CVar guard for a
 -- collision this plugin hasn't been reported to hit. Unlike Homestead's own
 -- dodge, this deliberately does NOT skip world/continent maps -- a
--- zone-summary or continent-summary pin gets the dodge, the separation pass
--- below, and the gold border above, the same as an ordinary vendor pin.
+-- zone-summary or continent-summary pin gets the dodge and the separation
+-- pass below, the same as an ordinary vendor pin.
 --
 -- The POI list is read once per HNH refresh, not kept live -- a POI that
 -- appears, moves, or despawns while the map stays open isn't picked up
@@ -1744,17 +1625,20 @@ local function InstallVendorPinLayering()
     -- released, still-raised pin of ours out of the pool), not only ours.
     hooksecurefunc(HandyNotes.WorldMapDataProvider, "RefreshPlugin", function(_, pluginName)
         RaiseVendorPins()
-        -- The placement adjustments, the border, and the size bonus, unlike
-        -- the reset branch above, only ever need to run on HNH's OWN
-        -- refresh -- our pins aren't re-acquired on someone else's refresh,
-        -- so running them then would push an already-adjusted pin further
-        -- away every time (adjustments), do nothing new (the border is
-        -- already shown), or grow an already-grown pin again (size),
-        -- drifting or repeating work with every unrelated map refresh
-        -- instead of settling once per HNH refresh.
+        -- The placement adjustments and the size bonus, unlike the reset
+        -- branch above, only ever need to run on HNH's OWN refresh -- our
+        -- pins aren't re-acquired on someone else's refresh, so running them
+        -- then would push an already-adjusted pin further away every time
+        -- (adjustments) or grow an already-grown pin again (size), drifting
+        -- or repeating work with every unrelated map refresh instead of
+        -- settling once per HNH refresh.
+        --
+        -- Order between the two doesn't matter: adjustments only ever reads
+        -- or writes a pin's POSITION (GetPosition/SetPosition), size only
+        -- ever reads or writes its SIZE (GetSize/SetSize) -- neither pass
+        -- touches the property the other one owns.
         if pluginName == PLUGIN_NAME then
             ApplyPinPlacementAdjustments()
-            ShowVendorPinBorders()
             GrowVendorPinSize()
         end
     end)

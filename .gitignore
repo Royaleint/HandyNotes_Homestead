@@ -20,3 +20,6 @@ HNH_Dev/
 
 # Local agent instructions.
 /AGENTS.md
+
+# Claude Code session state (reports, review markers) — never packaged, never tracked.
+.claude/

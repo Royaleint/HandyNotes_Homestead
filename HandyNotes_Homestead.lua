@@ -1287,6 +1287,11 @@ local options = {
 
 local VENDOR_PIN_FRAME_LEVEL_TYPE = "PIN_FRAME_LEVEL_QUEST_PING"
 
+-- Forward declaration: defined below, in the Gold border section -- but
+-- RaiseVendorPins' reset branch (immediately below) needs to call it too,
+-- and it's defined after RaiseVendorPins in the file.
+local SetVendorPinBorderShown
+
 -- The frame level is a plain frame property that nothing clears on its own
 -- (HandyNotes releases a pin back to its pool without resetting it, and
 -- reacquiring it for reuse doesn't re-set it either -- see the reset branch
@@ -1313,9 +1318,9 @@ local function RaiseVendorPins()
             -- The gold border (see the section below) is HNH-only art --
             -- hide it, the same way the frame level gets reset, whenever
             -- this pin is reassigned to a different plugin. Never destroy
-            -- the texture: it's reused if we get the pin back later.
+            -- the textures: they're reused if we get the pin back later.
             if pin._hnhBorder then
-                pin._hnhBorder:Hide()
+                SetVendorPinBorderShown(pin, false)
             end
         end
     end
@@ -1324,39 +1329,90 @@ end
 -------------------------------------------------------------------------------
 -- Gold border
 --
--- A plain gold border on our own world-map pins, matching the look of
--- Blizzard's own item-slot border art, so a vendor pin reads as a distinct
--- clickable frame instead of blending into the surrounding icons. World map
--- only -- minimap pins are untouched.
---
--- Drawn whole, with no texcoords, anchored to the icon's own bounds -- that
--- is how Blizzard itself uses this art everywhere it appears (e.g.
--- Blizzard_EncounterJournal.xml's IconBorder, Blizzard_PetCollection.xml's
--- qualityBorder), not a choice specific to this file.
+-- Four one-pixel gold lines just outside the icon, not an art texture --
+-- drawn from solid colour so the outline matches the icon at any pin size,
+-- rather than relying on a fixed-size Blizzard texture lining up with a
+-- much smaller icon. World map only -- minimap pins are untouched.
 -------------------------------------------------------------------------------
 
-local VENDOR_PIN_BORDER_FILE = "Interface\\Common\\WhiteIconFrame"
-local VENDOR_PIN_BORDER_R, VENDOR_PIN_BORDER_G, VENDOR_PIN_BORDER_B = 1, 0.82, 0 -- standard gold
+local VENDOR_PIN_BORDER_R, VENDOR_PIN_BORDER_G, VENDOR_PIN_BORDER_B, VENDOR_PIN_BORDER_A = 1, 0.82, 0, 1 -- standard gold
+local VENDOR_PIN_BORDER_THICKNESS = 1 -- px
+local VENDOR_PIN_BORDER_OUTSET = 1 -- px the border sits outside the icon, so the lines outline it instead of covering it
 
--- Creates the border texture once per pin FRAME and reuses it after --
--- HandyNotes pools pin frames across plugins and across our own refreshes,
--- so a given frame only ever needs this once in its whole lifetime, however
--- many times it gets reassigned between plugins. Anchored to the icon
--- texture (HandyNotesWorldMapPinTemplate always provides `pin.texture` --
--- HandyNotes.xml) rather than the pin frame or the parent map, since the
--- pin's own SetPosition already places the frame -- the border just needs
--- to track the icon it outlines. Left at the default blend mode so it reads
--- as a border, not a glow.
+local function CreateVendorPinBorderLine(pin)
+    local line = pin:CreateTexture(nil, "OVERLAY", nil, 1) -- one sublevel above the icon
+    line:SetColorTexture(VENDOR_PIN_BORDER_R, VENDOR_PIN_BORDER_G, VENDOR_PIN_BORDER_B, VENDOR_PIN_BORDER_A)
+    -- The pin sits at a fractional size and scale, so a one-pixel line whose
+    -- edges snap to the pixel grid can round to nothing on one side and two
+    -- pixels on another. Turn snapping off, as HandyNotes does for the icon.
+    line:SetTexelSnappingBias(0)
+    line:SetSnapToPixelGrid(false)
+    return line
+end
+
+-- Creates the four border line textures once per pin FRAME and reuses them
+-- after -- HandyNotes pools pin frames across plugins and across our own
+-- refreshes, so a given frame only ever needs this once in its whole
+-- lifetime, however many times it gets reassigned between plugins.
+--
+-- Each line is anchored with a SetPoint PAIR against the icon texture
+-- (HandyNotesWorldMapPinTemplate always provides `pin.texture` --
+-- HandyNotes.xml), not SetAllPoints -- a single line has no "all points" to
+-- take, and pairing two corner points is what lets each line stretch to
+-- track the icon's own live width or height while staying pinned
+-- VENDOR_PIN_BORDER_OUTSET px outside the corresponding edge. If the pin
+-- frame is later scaled (MapCanvas's own zoom scaling), the lines scale
+-- with it like any other child region -- that's correct, not a bug to guard
+-- against.
 local function EnsureVendorPinBorder(pin)
     local border = pin._hnhBorder
     if border then return border end
 
-    border = pin:CreateTexture(nil, "OVERLAY", nil, 1) -- one sublevel above the icon
+    local texture = pin.texture
+    local outset = VENDOR_PIN_BORDER_OUTSET
+
+    local top = CreateVendorPinBorderLine(pin)
+    top:SetPoint("TOPLEFT", texture, "TOPLEFT", -outset, outset)
+    top:SetPoint("TOPRIGHT", texture, "TOPRIGHT", outset, outset)
+    top:SetHeight(VENDOR_PIN_BORDER_THICKNESS)
+
+    local bottom = CreateVendorPinBorderLine(pin)
+    bottom:SetPoint("BOTTOMLEFT", texture, "BOTTOMLEFT", -outset, -outset)
+    bottom:SetPoint("BOTTOMRIGHT", texture, "BOTTOMRIGHT", outset, -outset)
+    bottom:SetHeight(VENDOR_PIN_BORDER_THICKNESS)
+
+    local left = CreateVendorPinBorderLine(pin)
+    left:SetPoint("TOPLEFT", texture, "TOPLEFT", -outset, outset)
+    left:SetPoint("BOTTOMLEFT", texture, "BOTTOMLEFT", -outset, -outset)
+    left:SetWidth(VENDOR_PIN_BORDER_THICKNESS)
+
+    local right = CreateVendorPinBorderLine(pin)
+    right:SetPoint("TOPRIGHT", texture, "TOPRIGHT", outset, outset)
+    right:SetPoint("BOTTOMRIGHT", texture, "BOTTOMRIGHT", outset, -outset)
+    right:SetWidth(VENDOR_PIN_BORDER_THICKNESS)
+
+    border = { top = top, bottom = bottom, left = left, right = right }
     pin._hnhBorder = border
-    border:SetTexture(VENDOR_PIN_BORDER_FILE)
-    border:SetVertexColor(VENDOR_PIN_BORDER_R, VENDOR_PIN_BORDER_G, VENDOR_PIN_BORDER_B)
-    border:SetAllPoints(pin.texture)
     return border
+end
+
+-- Shared by ShowVendorPinBorders below and RaiseVendorPins' reset branch
+-- above -- the one place that shows or hides all four lines together, so
+-- neither call site can accidentally touch only some of them.
+SetVendorPinBorderShown = function(pin, shown)
+    local border = pin._hnhBorder
+    if not border then return end
+    if shown then
+        border.top:Show()
+        border.bottom:Show()
+        border.left:Show()
+        border.right:Show()
+    else
+        border.top:Hide()
+        border.bottom:Hide()
+        border.left:Hide()
+        border.right:Hide()
+    end
 end
 
 -- Runs only on HNH's OWN RefreshPlugin call, same as
@@ -1369,7 +1425,8 @@ local function ShowVendorPinBorders()
     if not WorldMapFrame or not WorldMapFrame.EnumeratePinsByTemplate then return end
     for pin in WorldMapFrame:EnumeratePinsByTemplate("HandyNotesWorldMapPinTemplate") do
         if pin.pluginName == PLUGIN_NAME and pin.CreateTexture then
-            EnsureVendorPinBorder(pin):Show()
+            EnsureVendorPinBorder(pin)
+            SetVendorPinBorderShown(pin, true)
         end
     end
 end

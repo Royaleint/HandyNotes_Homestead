@@ -1318,17 +1318,28 @@ end
 -- Mock for a texture created by pin:CreateTexture -- records every call the
 -- gold-border code makes on it, so a test can assert file/color/anchor/
 -- shown state without touching real WoW texture objects.
+-- Mock for a texture created by pin:CreateTexture -- records every call the
+-- gold-border code makes on it, so a test can assert colour/anchor pairs/
+-- thickness/shown state without touching real WoW texture objects.
 local function makeTextureMock()
-    local texture = { shown = false, setAllPointsCalls = 0 }
-    function texture:SetTexture(file)
-        self.file = file
+    local texture = { shown = false, setPointCalls = {} }
+    function texture:SetColorTexture(r, g, b, a)
+        self.color = { r, g, b, a }
     end
-    function texture:SetVertexColor(r, g, b)
-        self.color = { r, g, b }
+    function texture:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs)
+        self.setPointCalls[#self.setPointCalls + 1] = { point, relativeTo, relativePoint, xOfs, yOfs }
     end
-    function texture:SetAllPoints(target)
-        self.setAllPointsCalls = self.setAllPointsCalls + 1
-        self.allPointsTarget = target
+    function texture:SetHeight(height)
+        self.height = height
+    end
+    function texture:SetWidth(width)
+        self.width = width
+    end
+    function texture:SetTexelSnappingBias(bias)
+        self.texelSnappingBias = bias
+    end
+    function texture:SetSnapToPixelGrid(snap)
+        self.snapToPixelGrid = snap
     end
     function texture:Show()
         self.shown = true
@@ -1341,18 +1352,79 @@ end
 
 -- Same as makePin, plus a pre-existing icon `.texture` mock and a
 -- CreateTexture that records how many times it was called (and with what
--- args) so a test can prove the gold border is created once and reused,
--- never recreated.
+-- args, one entry per call -- the border creates FOUR textures, one per
+-- line) so a test can prove all four are created once and reused, never
+-- recreated.
 local function makeBorderPin(pluginName)
     local pin = makePin(pluginName)
     pin.texture = makeTextureMock()
     pin.createTextureCalls = 0
+    pin.createTextureArgs = {}
     function pin:CreateTexture(name, layer, template, subLevel)
         self.createTextureCalls = self.createTextureCalls + 1
-        self.createTextureArgs = { name, layer, template, subLevel }
+        self.createTextureArgs[self.createTextureCalls] = { name, layer, template, subLevel }
         return makeTextureMock()
     end
     return pin
+end
+
+-- Expected SetPoint pairs for each of the border's four lines -- two
+-- corner-to-corner anchors per line, all against `pin.texture`, all offset
+-- 1px outward (the outset) so the lines sit just outside the icon instead
+-- of covering it. Matches EnsureVendorPinBorder exactly; used by
+-- checkVendorPinBorderGeometry below.
+local BORDER_LINE_SPECS = {
+    { key = "top", sizeField = "height", points = {
+        { "TOPLEFT", "TOPLEFT", -1, 1 },
+        { "TOPRIGHT", "TOPRIGHT", 1, 1 },
+    } },
+    { key = "bottom", sizeField = "height", points = {
+        { "BOTTOMLEFT", "BOTTOMLEFT", -1, -1 },
+        { "BOTTOMRIGHT", "BOTTOMRIGHT", 1, -1 },
+    } },
+    { key = "left", sizeField = "width", points = {
+        { "TOPLEFT", "TOPLEFT", -1, 1 },
+        { "BOTTOMLEFT", "BOTTOMLEFT", -1, -1 },
+    } },
+    { key = "right", sizeField = "width", points = {
+        { "TOPRIGHT", "TOPRIGHT", 1, 1 },
+        { "BOTTOMRIGHT", "BOTTOMRIGHT", 1, -1 },
+    } },
+}
+
+-- All four border lines exist, are gold, are anchored exactly as
+-- EnsureVendorPinBorder specifies, and are the expected thickness.
+local function checkVendorPinBorderGeometry(pin)
+    for _, name in ipairs({ "top", "bottom", "left", "right" }) do
+        local line = pin._hnhBorder[name]
+        check(line.texelSnappingBias == 0 and line.snapToPixelGrid == false,
+            "border line " .. name .. " must have pixel snapping disabled (fractional pin sizes)")
+    end
+    local border = pin._hnhBorder
+    check(border ~= nil, "the pin must have a border recorded on it")
+    for _, spec in ipairs(BORDER_LINE_SPECS) do
+        local line = border[spec.key]
+        check(line ~= nil, spec.key .. " line must exist")
+        check(line.color and line.color[1] == 1 and line.color[2] == 0.82 and line.color[3] == 0 and line.color[4] == 1,
+            spec.key .. " line must be tinted standard gold with full alpha, got " .. tostring(line.color and table.concat(line.color, ",")))
+        check(line[spec.sizeField] == 1, spec.key .. " line must be 1px thick, got " .. tostring(line[spec.sizeField]))
+        for pointIndex, expected in ipairs(spec.points) do
+            local call = line.setPointCalls[pointIndex]
+            check(call ~= nil, spec.key .. " line missing SetPoint call #" .. pointIndex)
+            check(call[1] == expected[1] and call[2] == pin.texture and call[3] == expected[2]
+                    and call[4] == expected[3] and call[5] == expected[4],
+                spec.key .. " line SetPoint #" .. pointIndex .. " mismatch, got point=" .. tostring(call[1])
+                    .. " relPoint=" .. tostring(call[3]) .. " x=" .. tostring(call[4]) .. " y=" .. tostring(call[5]))
+        end
+    end
+end
+
+local function allVendorPinBorderLinesShown(border)
+    return border.top.shown and border.bottom.shown and border.left.shown and border.right.shown
+end
+
+local function anyVendorPinBorderLineShown(border)
+    return border.top.shown or border.bottom.shown or border.left.shown or border.right.shown
 end
 
 local function runVendorPinLayering()
@@ -1807,8 +1879,9 @@ end
 local function runVendorPinBorder()
     local PLUGIN_NAME = "Homestead"
 
-    -- (l) our pin gets exactly one border texture across repeated refreshes
-    -- (never recreated), shown, gold, and using Blizzard's own border file.
+    -- (l) our pin gets exactly four border line textures (once each) across
+    -- repeated refreshes -- never recreated -- all shown, all gold, all
+    -- anchored to the pin's own icon texture exactly as specified.
     do
         local pins = {}
         local rt = loadPinRuntime(pins)
@@ -1817,39 +1890,36 @@ local function runVendorPinBorder()
         HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
         HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
         HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
-        check(pin.createTextureCalls == 1, "the border texture must be created exactly once across repeated refreshes")
-        local border = pin._hnhBorder
-        check(border ~= nil, "the pin must have a border texture recorded on it")
-        check(border.shown == true, "the border must be shown")
-        check(border.file == "Interface\\Common\\WhiteIconFrame", "the border must use Blizzard's own item-slot border texture")
-        check(border.color and border.color[1] == 1 and border.color[2] == 0.82 and border.color[3] == 0,
-            "the border must be tinted standard gold, got " .. tostring(border.color and table.concat(border.color, ",")))
-        check(border.allPointsTarget == pin.texture, "the border must be anchored to the pin's own icon texture")
-        check(pin.createTextureArgs and pin.createTextureArgs[2] == "OVERLAY",
-            "the border must be created on the OVERLAY layer, got " .. tostring(pin.createTextureArgs and pin.createTextureArgs[2]))
-        check(pin.createTextureArgs and pin.createTextureArgs[4] == 1,
-            "the border must be created one sublevel above the icon's default, got " .. tostring(pin.createTextureArgs and pin.createTextureArgs[4]))
+        check(pin.createTextureCalls == 4, "the border's four lines must be created exactly once each across repeated refreshes, got " .. tostring(pin.createTextureCalls))
+        for _, args in ipairs(pin.createTextureArgs) do
+            check(args[2] == "OVERLAY", "every border line must be created on the OVERLAY layer, got " .. tostring(args[2]))
+            check(args[4] == 1, "every border line must be created one sublevel above the icon's default, got " .. tostring(args[4]))
+        end
+        checkVendorPinBorderGeometry(pin)
+        check(allVendorPinBorderLinesShown(pin._hnhBorder), "all four border lines must be shown")
         rt.restore()
     end
 
-    -- (m) a pin reassigned to a different plugin has its border hidden on
-    -- THAT plugin's own refresh -- mirrors the frame-level reset branch.
+    -- (m) a pin reassigned to a different plugin has ALL FOUR border lines
+    -- hidden together on THAT plugin's own refresh -- mirrors the
+    -- frame-level reset branch. Checked with "any line still shown", not
+    -- just one representative line, so a partial hide (e.g. 3 of 4) fails.
     do
         local pins = {}
         local rt = loadPinRuntime(pins)
         local pin = makeBorderPin(PLUGIN_NAME)
         pins[#pins + 1] = pin
         HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
-        check(pin._hnhBorder.shown == true, "setup: the border must be shown after our own refresh")
+        check(allVendorPinBorderLinesShown(pin._hnhBorder), "setup: all four border lines must be shown after our own refresh")
         pin.pluginName = "OtherPlugin" -- HandyNotes reassigned it from its pool
         HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, "OtherPlugin")
-        check(pin._hnhBorder.shown == false, "a pin reassigned to a different plugin must have its border hidden")
-        check(pin.createTextureCalls == 1, "the border texture must never be destroyed or recreated, only hidden")
+        check(not anyVendorPinBorderLineShown(pin._hnhBorder), "a pin reassigned to a different plugin must have ALL FOUR border lines hidden, not just some of them")
+        check(pin.createTextureCalls == 4, "the border lines must never be destroyed or recreated, only hidden")
         rt.restore()
     end
 
     -- (n) a pin HandyNotes gives back to us later shows its border again --
-    -- reusing the SAME texture, not creating a new one.
+    -- reusing the SAME four textures, not creating new ones.
     do
         local pins = {}
         local rt = loadPinRuntime(pins)
@@ -1859,12 +1929,12 @@ local function runVendorPinBorder()
         local firstBorder = pin._hnhBorder
         pin.pluginName = "OtherPlugin"
         HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, "OtherPlugin")
-        check(firstBorder.shown == false, "setup: the border must be hidden after reassignment")
+        check(not anyVendorPinBorderLineShown(firstBorder), "setup: all four border lines must be hidden after reassignment")
         pin.pluginName = PLUGIN_NAME -- HandyNotes gave the pin back to us
         HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
-        check(pin._hnhBorder == firstBorder, "re-acquiring the pin must reuse the SAME border texture, not create a new one")
-        check(pin._hnhBorder.shown == true, "the border must be shown again once the pin is ours again")
-        check(pin.createTextureCalls == 1, "re-acquiring the pin must not create a second border texture")
+        check(pin._hnhBorder == firstBorder, "re-acquiring the pin must reuse the SAME border table, not create a new one")
+        check(allVendorPinBorderLinesShown(pin._hnhBorder), "all four border lines must be shown again once the pin is ours again")
+        check(pin.createTextureCalls == 4, "re-acquiring the pin must not create a second set of border lines")
         rt.restore()
     end
 
@@ -1882,9 +1952,9 @@ local function runVendorPinBorder()
         pins[#pins + 1] = ourPin
         pins[#pins + 1] = foreignPin
         HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
-        check(ourPin.createTextureCalls == 1 and ourPin._hnhBorder ~= nil and ourPin._hnhBorder.shown == true,
-            "our own pin must still get a border on our own refresh")
-        check(foreignPin.createTextureCalls == 0, "a foreign plugin's pin must never have a border texture created on it")
+        check(ourPin.createTextureCalls == 4 and ourPin._hnhBorder ~= nil and allVendorPinBorderLinesShown(ourPin._hnhBorder),
+            "our own pin must still get its border on our own refresh")
+        check(foreignPin.createTextureCalls == 0, "a foreign plugin's pin must never have any border line texture created on it")
         check(foreignPin._hnhBorder == nil, "a foreign plugin's pin must never end up with a recorded border")
         rt.restore()
     end

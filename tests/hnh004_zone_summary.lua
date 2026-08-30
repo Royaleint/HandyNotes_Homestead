@@ -27,13 +27,40 @@ local function restoreAll()
     end
 end
 
-local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider, hbdTranslation, professionSkillLineID, itemNames, currencyNames, itemIcons)
+local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider, hbdTranslation, professionSkillLineID, itemNames, currencyNames, itemIcons, pins, poiMocks)
     local registered
     local frame
     local factionState = { value = faction }
     local tooltip = { lines = {}, owner = nil, scripts = {}, hookInstallations = 0 }
     local waypoint = { set = 0, clear = 0, superTrack = 0 }
     local mapSelection
+    -- HNH-020 redesign (layer, not dodge): pin-layering test control. `pins`
+    -- (optional) is the caller-owned pin list for WorldMapFrame's
+    -- EnumeratePinsByTemplate mock below -- kept as the SAME table reference
+    -- the caller passed in (not copied), so a test can push/mutate pins into
+    -- it AFTER loadRuntime returns and have the next enumeration see the
+    -- change. Every other test leaves `pins` nil, which is also the gate
+    -- (`pins ~= nil` below) for whether HandyNotes.WorldMapDataProvider and
+    -- hooksecurefunc get mocked at all -- if they were always mocked,
+    -- InstallVendorPinLayering would install its hook on every login and
+    -- inflate the exact hookInstallations counts several pre-existing tests
+    -- assert (e.g. "== 2", "== 6").
+    local pinLayeringEnabled = pins ~= nil
+    local pinList = pins or {}
+    -- POI-nudge test control (HNH-020 follow-up). `poiMocks` (optional, only
+    -- meaningful alongside `pins`) is a table of:
+    --   mapID            -- returned by WorldMapFrame:GetMapID()
+    --   width, height    -- returned by the canvas container's GetWidth/GetHeight
+    --   areaPoiIDs       -- list returned by C_AreaPoiInfo.GetAreaPOIForMap
+    --   eventPoiIDs      -- list returned by C_AreaPoiInfo.GetEventsForMap
+    --   poiPositions     -- { [id] = {x=,y=} } consulted by GetAreaPOIInfo
+    --   areaPoiThrows / eventPoiThrows -- make that list call error()
+    --   noApi            -- omit C_AreaPoiInfo entirely (API absent)
+    --   noMapID / noContainer -- omit the matching WorldMapFrame method
+    -- Left nil, WorldMapFrame gets no GetMapID/GetCanvasContainer and
+    -- C_AreaPoiInfo is left as whatever it already was (nil in tests) --
+    -- ApplyPoiNudge's own guards then no-op it out, so every pre-existing
+    -- pin-layering test is unaffected by this parameter's addition.
     local rectangleCalls = 0
     local rectangleOrder = {}
     local itemCached = true
@@ -44,6 +71,12 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     local createdFrames = {}
     local hookInstallations = 0
     local libStubCalls = 0
+    -- Dedicated counter for hooksecurefunc installs specifically -- distinct
+    -- from hookInstallations (which also counts HookScript installs, e.g.
+    -- the unrelated pin-hide/map-hide tooltip-teardown hooks OnEnter
+    -- installs), so a test can prove the RefreshPlugin hook installs exactly
+    -- once without an ordinary OnEnter call spuriously bumping the count.
+    local hookSecureFuncInstalls = 0
     local fixture = runtimeFixture or {
         [900] = { mapID = 900, mapType = 2 },
         [101] = { mapID = 101, mapType = 3, parentMapID = 900, name = "Alpha" },
@@ -86,6 +119,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         "Enum", "next", "pairs", "C_Map", "C_Texture", "C_AddOns", "UnitFactionGroup", "CreateFrame",
         "GameTooltip", "UIParent", "WorldMapFrame", "UiMapPoint", "C_SuperTrack", "C_CurrencyInfo",
         "C_Item", "Item", "C_Timer", "HandyNotes", "LibStub", "GetProfessions", "GetProfessionInfo",
+        "hooksecurefunc", "C_AreaPoiInfo",
     }
     local originalGlobals = {}
     for index = 1, #globalNames do
@@ -279,6 +313,47 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
             worldMap.scripts[scriptName] = callback
         end,
     }
+    if pinLayeringEnabled then
+        -- Iterates `pinList` LIVE (reads it fresh each call, not a snapshot)
+        -- so a test can append/mutate pins between two RefreshPlugin calls.
+        _G.WorldMapFrame.EnumeratePinsByTemplate = function(_, template)
+            local list = template == "HandyNotesWorldMapPinTemplate" and pinList or {}
+            local index = 0
+            return function()
+                index = index + 1
+                return list[index]
+            end
+        end
+        if poiMocks then
+            if not poiMocks.noMapID then
+                _G.WorldMapFrame.GetMapID = function() return poiMocks.mapID end
+            end
+            if not poiMocks.noContainer then
+                _G.WorldMapFrame.GetCanvasContainer = function()
+                    return {
+                        GetWidth = function() return poiMocks.width end,
+                        GetHeight = function() return poiMocks.height end,
+                    }
+                end
+            end
+            if not poiMocks.noApi then
+                _G.C_AreaPoiInfo = {
+                    GetAreaPOIForMap = function()
+                        if poiMocks.areaPoiThrows then error("test: area POI list broke") end
+                        return poiMocks.areaPoiIDs or {}
+                    end,
+                    GetEventsForMap = function()
+                        if poiMocks.eventPoiThrows then error("test: event POI list broke") end
+                        return poiMocks.eventPoiIDs or {}
+                    end,
+                    GetAreaPOIInfo = function(_, id)
+                        local pos = poiMocks.poiPositions and poiMocks.poiPositions[id]
+                        return pos and { position = pos } or nil
+                    end,
+                }
+            end
+        end
+    end
     _G.UiMapPoint = { CreateFromCoordinates = function(_, x, y) return { x = x, y = y } end }
     _G.C_SuperTrack = { SetSuperTrackedUserWaypoint = function() waypoint.superTrack = waypoint.superTrack + 1 end }
     _G.C_CurrencyInfo = {
@@ -336,6 +411,25 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         RegisterPluginDB = function(_, _, handler) registered = handler end,
         getXY = function(_, coord) return math.floor(coord / 10000) / 10000, (coord % 10000) / 10000 end,
     }
+    if pinLayeringEnabled then
+        _G.HandyNotes.WorldMapDataProvider = { RefreshPlugin = function() end }
+        -- Wraps tbl[name] so calling it also runs hookFn afterward -- close
+        -- enough to real hooksecurefunc for a single hook on RefreshPlugin,
+        -- which is all this file installs. Counts toward the SAME
+        -- hookInstallations total as HookScript above, so the existing
+        -- no-op-path assertions (hookInstallations == 0 when Homestead is
+        -- loaded) also catch a hook installed on the wrong side of that
+        -- guard.
+        _G.hooksecurefunc = function(tbl, name, hookFn)
+            hookInstallations = hookInstallations + 1
+            hookSecureFuncInstalls = hookSecureFuncInstalls + 1
+            local original = tbl[name]
+            tbl[name] = function(...)
+                if original then original(...) end
+                hookFn(...)
+            end
+        end
+    end
     _G.LibStub = function(name)
         libStubCalls = libStubCalls + 1
         if name == "AceDB-3.0" then
@@ -357,7 +451,8 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     return registered, tooltip, waypoint, function() return mapSelection end, function(value) factionState.value = value end,
         function() return rectangleCalls, rectangleOrder end, forcedZoneOrder, restore, data,
         function(value) itemCached = value end, itemLoadCallbacks, editBoxes, timers, createdFrames,
-        function() return hookInstallations end, function() return libStubCalls end, itemLoadCallbacksByID
+        function() return hookInstallations end, function() return libStubCalls end, itemLoadCallbacksByID,
+        function() return hookSecureFuncInstalls end
 end
 
 local function collect(handler, mapID, minimap)
@@ -1152,6 +1247,713 @@ local function runVendorCostRenderInteractiveRemeasure()
     restore()
 end
 
+-- HNH-020 redesign (layer, not dodge): vendor pins raised to the Quest Ping
+-- frame-level band so they always draw over Blizzard's area POI pins
+-- (regular and event) instead of a coin-flip-by-sibling-order. Named-field wrapper around
+-- loadRuntime's positional return list, matching the pattern the dodge
+-- prototype used for the same reason: a hand-counted positional
+-- destructuring is exactly the kind of thing that silently grabs the wrong
+-- value and produces a misleading failure.
+local function loadPinRuntime(pins)
+    local r = { loadRuntime({}, "Alliance", nil, nil, nil, nil, nil, nil, nil, nil, nil, pins) }
+    return {
+        handler = r[1], tooltip = r[2], waypoint = r[3], mapSelection = r[4], setFaction = r[5],
+        rectangleStats = r[6], forcedZoneOrder = r[7], restore = r[8], data = r[9],
+        setItemCached = r[10], itemLoadCallbacks = r[11], editBoxes = r[12], timers = r[13],
+        createdFrames = r[14], hookCount = r[15], libStubCalls = r[16], itemLoadCallbacksByID = r[17],
+        hookSecureFuncInstalls = r[18],
+    }
+end
+
+-- HNH-020 follow-up (POI-proximity nudge, later pin self-avoidance): same
+-- loadRuntime call as loadPinRuntime, but also threading poiMocks
+-- (positional slot 13) through.
+local function loadNudgeRuntime(pins, poiMocks)
+    local r = { loadRuntime({}, "Alliance", nil, nil, nil, nil, nil, nil, nil, nil, nil, pins, poiMocks) }
+    return {
+        handler = r[1], tooltip = r[2], waypoint = r[3], mapSelection = r[4], setFaction = r[5],
+        rectangleStats = r[6], forcedZoneOrder = r[7], restore = r[8], data = r[9],
+        setItemCached = r[10], itemLoadCallbacks = r[11], editBoxes = r[12], timers = r[13],
+        createdFrames = r[14], hookCount = r[15], libStubCalls = r[16], itemLoadCallbacksByID = r[17],
+        hookSecureFuncInstalls = r[18],
+    }
+end
+
+-- 12x12 matches HandyNotes' own OnAcquired default (12 * icon_scale * scale,
+-- both 1 by default) -- see runVendorPinSize.
+local function makePin(pluginName, hnhRaised)
+    local pin = { pluginName = pluginName, _hnhRaised = hnhRaised, applyCalls = 0, width = 12, height = 12, setSizeCalls = 0 }
+    function pin:UseFrameLevelType(levelType)
+        self.levelType = levelType
+    end
+    function pin:ApplyFrameLevel()
+        self.applyCalls = self.applyCalls + 1
+    end
+    function pin:GetSize()
+        return self.width, self.height
+    end
+    function pin:SetSize(width, height)
+        self.width, self.height = width, height
+        self.setSizeCalls = self.setSizeCalls + 1
+    end
+    return pin
+end
+
+-- Same as makePin, plus normalized-coordinate GetPosition/SetPosition so it
+-- can also stand in for a pin ApplyPoiNudge acts on.
+local function makeNudgePin(pluginName, x, y)
+    local pin = makePin(pluginName)
+    pin.x, pin.y = x, y
+    pin.setPositionCalls = 0
+    function pin:GetPosition()
+        return self.x, self.y, self.insetIndex
+    end
+    function pin:SetPosition(newX, newY, insetIndex)
+        self.x, self.y, self.insetIndex = newX, newY, insetIndex
+        self.setPositionCalls = self.setPositionCalls + 1
+    end
+    return pin
+end
+
+-- Mock for a texture created by pin:CreateTexture -- records every call the
+-- gold-border code makes on it, so a test can assert file/color/anchor/
+-- shown state without touching real WoW texture objects.
+local function makeTextureMock()
+    local texture = { shown = false, setAllPointsCalls = 0 }
+    function texture:SetTexture(file)
+        self.file = file
+    end
+    function texture:SetVertexColor(r, g, b)
+        self.color = { r, g, b }
+    end
+    function texture:SetAllPoints(target)
+        self.setAllPointsCalls = self.setAllPointsCalls + 1
+        self.allPointsTarget = target
+    end
+    function texture:Show()
+        self.shown = true
+    end
+    function texture:Hide()
+        self.shown = false
+    end
+    return texture
+end
+
+-- Same as makePin, plus a pre-existing icon `.texture` mock and a
+-- CreateTexture that records how many times it was called (and with what
+-- args) so a test can prove the gold border is created once and reused,
+-- never recreated.
+local function makeBorderPin(pluginName)
+    local pin = makePin(pluginName)
+    pin.texture = makeTextureMock()
+    pin.createTextureCalls = 0
+    function pin:CreateTexture(name, layer, template, subLevel)
+        self.createTextureCalls = self.createTextureCalls + 1
+        self.createTextureArgs = { name, layer, template, subLevel }
+        return makeTextureMock()
+    end
+    return pin
+end
+
+local function runVendorPinLayering()
+    local PLUGIN_NAME = "Homestead"
+
+    -- (a) a RefreshPlugin("Homestead") call raises HNH's own pin to the
+    -- Quest Ping band exactly once and leaves another plugin's pin untouched.
+    do
+        local pins = {}
+        local rt = loadPinRuntime(pins)
+        local hnhPin = makePin(PLUGIN_NAME)
+        local otherPin = makePin("OtherPlugin")
+        pins[#pins + 1] = hnhPin
+        pins[#pins + 1] = otherPin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(hnhPin.levelType == "PIN_FRAME_LEVEL_QUEST_PING" and hnhPin.applyCalls == 1,
+            "HNH's own pin must be raised to the Quest Ping frame-level band exactly once per refresh")
+        check(hnhPin._hnhRaised == true, "a raised pin must be marked so a later plugin-reassignment can be detected")
+        check(otherPin.levelType == nil and otherPin.applyCalls == 0,
+            "a pin belonging to a different plugin must never be touched")
+        rt.restore()
+    end
+
+    -- (b) [round 2, Argus Warning 2] the reset branch must run on EVERY
+    -- plugin's RefreshPlugin, not only HNH's own -- a pin we raised, then
+    -- reassigned by HandyNotes to a different plugin, must be reset to
+    -- AREA_POI on THAT plugin's own refresh, without waiting for HNH's next
+    -- one. A pin still owned by HNH stays at Quest Ping (re-raised, since the
+    -- per-pin pluginName check inside RaiseVendorPins runs on every call).
+    do
+        local pins = {}
+        local rt = loadPinRuntime(pins)
+        local reassignedPin = makePin(PLUGIN_NAME)
+        local stillOursPin = makePin(PLUGIN_NAME)
+        pins[#pins + 1] = reassignedPin
+        pins[#pins + 1] = stillOursPin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(reassignedPin.levelType == "PIN_FRAME_LEVEL_QUEST_PING" and stillOursPin.levelType == "PIN_FRAME_LEVEL_QUEST_PING",
+            "setup: both pins must be raised on HNH's first refresh")
+
+        reassignedPin.pluginName = "OtherPlugin" -- HandyNotes reassigned it from its pool
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, "OtherPlugin")
+        check(reassignedPin.levelType == "PIN_FRAME_LEVEL_AREA_POI" and reassignedPin.applyCalls == 2 and reassignedPin._hnhRaised == nil,
+            "a pin reassigned to a different plugin must be reset on THAT plugin's own refresh, without waiting for an HNH refresh")
+        check(stillOursPin.levelType == "PIN_FRAME_LEVEL_QUEST_PING",
+            "a pin still owned by HNH must remain at the Quest Ping band after a different plugin's refresh")
+        rt.restore()
+    end
+
+    -- (c) a pin HNH previously raised, later reassigned by HandyNotes to a
+    -- different plugin (pin pooling), must be reset to HandyNotes' own
+    -- default frame level the next time HNH's OWN RefreshPlugin sweep runs
+    -- -- or it would keep HNH's frame level forever, wrong for whichever
+    -- plugin now actually owns it.
+    do
+        local pins = {}
+        local rt = loadPinRuntime(pins)
+        local pooledPin = makePin(PLUGIN_NAME)
+        pins[#pins + 1] = pooledPin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pooledPin.levelType == "PIN_FRAME_LEVEL_QUEST_PING" and pooledPin.applyCalls == 1,
+            "setup: the pin must be raised on its first refresh")
+        pooledPin.pluginName = "OtherPlugin" -- HandyNotes reassigned it from its pool
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pooledPin.levelType == "PIN_FRAME_LEVEL_AREA_POI" and pooledPin.applyCalls == 2,
+            "a pin reassigned away from HNH must be reset to HandyNotes' own default frame level")
+        check(pooledPin._hnhRaised == nil, "a reset pin must no longer be marked as HNH-raised")
+        rt.restore()
+    end
+
+    -- (d) the hook installs exactly once at login, never again from
+    -- repeated GetNodes2/OnEnter cycles. Uses the DEDICATED
+    -- hookSecureFuncInstalls counter, not the general hookInstallations one
+    -- -- OnEnter/OnLeave legitimately install their own unrelated
+    -- pin-hide/map-hide HookScript hooks, which must not be mistaken for a
+    -- second RefreshPlugin-hook install.
+    do
+        local pins = {}
+        local rt = loadPinRuntime(pins)
+        check(rt.hookSecureFuncInstalls() == 1,
+            "loading with the pin-layering mocks present must install the RefreshPlugin hook exactly once")
+        collect(rt.handler, 101, false)
+        collect(rt.handler, 101, true)
+        local pin = { GetCenter = function() return 0 end }
+        rt.handler.OnEnter(pin, 101, 10001000)
+        rt.handler.OnLeave(pin, 101, 10001000)
+        check(rt.hookSecureFuncInstalls() == 1,
+            "the pin-layering hook must install once at login, never per GetNodes2/OnEnter call")
+        rt.restore()
+    end
+end
+
+local function approxEqual(a, b)
+    return math.abs(a - b) < 0.0001
+end
+
+-- HNH-020 follow-up: shift a vendor pin 2px directly away from the closest
+-- Blizzard POI within 18px, on HNH's own RefreshPlugin only. A 1000x1000
+-- mock container makes 0.001 normalized == 1px, so the expected offsets
+-- below are easy to hand-check.
+local function runPoiNudge()
+    local PLUGIN_NAME = "Homestead"
+    local poiAtCenter = { mapID = 101, width = 1000, height = 1000, areaPoiIDs = { 1 }, poiPositions = { [1] = { x = 0.5, y = 0.5 } } }
+
+    -- (a) a pin diagonally within 18px of a POI moves 2px directly away,
+    -- checked on both axes.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, poiAtCenter)
+        local pin = makeNudgePin(PLUGIN_NAME, 0.51, 0.51) -- 10px, 10px from the POI -> dist ~14.14px
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.setPositionCalls == 1, "a pin within the collision threshold must be nudged exactly once")
+        check(pin.x > 0.51 and pin.y > 0.51, "the nudge must move the pin further away on BOTH axes, got x=" .. tostring(pin.x) .. " y=" .. tostring(pin.y))
+        check(approxEqual(pin.x, 0.51141421) and approxEqual(pin.y, 0.51141421),
+            "the nudge must be exactly 2px along the away unit vector, got x=" .. tostring(pin.x) .. " y=" .. tostring(pin.y))
+        rt.restore()
+    end
+
+    -- (b) a pin farther than 18px from every POI is left untouched.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, poiAtCenter)
+        local pin = makeNudgePin(PLUGIN_NAME, 0.53, 0.5) -- 30px from the POI
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.setPositionCalls == 0, "a pin outside the collision threshold must not be nudged")
+        check(pin.x == 0.53 and pin.y == 0.5, "an unnudged pin's coordinates must be untouched")
+        rt.restore()
+    end
+
+    -- (c) a pin exactly coincident with a POI (zero distance) pushes right
+    -- rather than dividing by zero.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, poiAtCenter)
+        local pin = makeNudgePin(PLUGIN_NAME, 0.5, 0.5)
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.setPositionCalls == 1, "a coincident pin must still be nudged")
+        check(approxEqual(pin.x, 0.502) and approxEqual(pin.y, 0.5),
+            "a coincident pin must be pushed 2px right, got x=" .. tostring(pin.x) .. " y=" .. tostring(pin.y))
+        rt.restore()
+    end
+
+    -- (d) drift guard: a DIFFERENT plugin's RefreshPlugin must not nudge
+    -- HNH's own pin, even though it's within range of a POI -- or every
+    -- other plugin's refresh would push it another 2px away, forever.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, poiAtCenter)
+        local pin = makeNudgePin(PLUGIN_NAME, 0.51, 0.51)
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, "OtherPlugin")
+        check(pin.setPositionCalls == 0, "another plugin's refresh must never nudge HNH's own pins")
+        check(pin.x == 0.51 and pin.y == 0.51, "HNH's pin must be untouched by another plugin's refresh")
+        rt.restore()
+    end
+
+    -- (e) a missing or throwing POI API must degrade to no nudge and no
+    -- error -- never abort the refresh.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, { mapID = 101, width = 1000, height = 1000, noApi = true })
+        local pin = makeNudgePin(PLUGIN_NAME, 0.51, 0.51)
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.setPositionCalls == 0, "an absent POI API must result in no nudge")
+        rt.restore()
+    end
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, { mapID = 101, width = 1000, height = 1000, areaPoiThrows = true, eventPoiThrows = true, areaPoiIDs = { 1 }, poiPositions = { [1] = { x = 0.5, y = 0.5 } } })
+        local pin = makeNudgePin(PLUGIN_NAME, 0.51, 0.51)
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.setPositionCalls == 0, "a throwing POI list API must result in no nudge, not an aborted refresh")
+        rt.restore()
+    end
+
+    -- (f) event POIs (C_AreaPoiInfo.GetEventsForMap) are dodge candidates
+    -- too, not only regular area POIs.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, { mapID = 101, width = 1000, height = 1000, eventPoiIDs = { 7 }, poiPositions = { [7] = { x = 0.5, y = 0.5 } } })
+        local pin = makeNudgePin(PLUGIN_NAME, 0.51, 0.51)
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.setPositionCalls == 1, "an event POI must count as a nudge candidate the same as a regular area POI")
+        rt.restore()
+    end
+
+    -- Closest-POI selection: two POIs within range, with the FARTHER one
+    -- listed FIRST -- proves the nearest-POI loop actually compares
+    -- distances instead of just keeping whichever candidate came first.
+    -- The far POI is directly above the pin (would nudge it further up,
+    -- leaving X untouched); the near POI is directly right of it (would
+    -- nudge it further left). Only the near one may move X.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, {
+            mapID = 101, width = 1000, height = 1000,
+            areaPoiIDs = { 1, 2 }, -- far POI listed first
+            poiPositions = {
+                [1] = { x = 0.5, y = 0.485 }, -- 15px away (farther)
+                [2] = { x = 0.505, y = 0.5 }, -- 5px away (nearer)
+            },
+        })
+        local pin = makeNudgePin(PLUGIN_NAME, 0.5, 0.5)
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.setPositionCalls == 1, "a pin within range of either POI must be nudged")
+        check(approxEqual(pin.x, 0.498) and approxEqual(pin.y, 0.5),
+            "the nudge must move the pin away from the NEARER poi (listed second), got x=" .. tostring(pin.x) .. " y=" .. tostring(pin.y))
+        rt.restore()
+    end
+
+    -- The [0.01, 0.99] clamp: a pin already at the map's edge, near a POI,
+    -- must not be nudged past the clamp bound.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, { mapID = 101, width = 1000, height = 1000, areaPoiIDs = { 1 }, poiPositions = { [1] = { x = 0.001, y = 0.5 } } })
+        local pin = makeNudgePin(PLUGIN_NAME, 0.005, 0.5) -- 4px right of the POI -- nudge would push it to x < 0.01 unclamped
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.setPositionCalls == 1, "a near-edge pin within range must still be nudged")
+        check(pin.x >= 0.01, "the nudge must never push a pin's X below the 0.01 clamp, got " .. tostring(pin.x))
+        rt.restore()
+    end
+
+    -- The [0.01, 0.99] clamp, Y axis -- a mirror of the X case above (the
+    -- clamp is applied identically on both axes; a one-axis test wouldn't
+    -- catch an axis-swap or copy-paste slip in the other line).
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, { mapID = 101, width = 1000, height = 1000, areaPoiIDs = { 1 }, poiPositions = { [1] = { x = 0.5, y = 0.001 } } })
+        local pin = makeNudgePin(PLUGIN_NAME, 0.5, 0.005) -- 4px below the POI -- nudge would push it to y < 0.01 unclamped
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.setPositionCalls == 1, "a near-edge pin within range must still be nudged")
+        check(pin.y >= 0.01, "the nudge must never push a pin's Y below the 0.01 clamp, got " .. tostring(pin.y))
+        rt.restore()
+    end
+
+    -- insetIndex passthrough: GetPosition's third return must survive to
+    -- SetPosition unchanged, or an inset-map pin would be silently promoted
+    -- to a global map coordinate.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, poiAtCenter)
+        local pin = makeNudgePin(PLUGIN_NAME, 0.51, 0.51)
+        pin.insetIndex = 3
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.setPositionCalls == 1, "setup: the pin must have been nudged")
+        check(pin.insetIndex == 3, "insetIndex must pass through SetPosition unchanged, got " .. tostring(pin.insetIndex))
+        rt.restore()
+    end
+
+    -- Non-finite position collection guard: a pin whose GetPosition returns
+    -- NaN must be skipped entirely -- never nudged, never separated, never
+    -- written back -- rather than propagating a NaN into the scratch arrays.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, poiAtCenter)
+        local pin = makeNudgePin(PLUGIN_NAME, 0 / 0, 0.5) -- 0/0 is NaN in Lua
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.setPositionCalls == 0, "a pin with a NaN position must never be written back")
+        rt.restore()
+    end
+end
+
+-- HNH-020 follow-up (pin self-avoidance): HNH's own pins pushed apart from
+-- EACH OTHER, independent of the POI dodge above. Same 1000x1000 mock
+-- container as runPoiNudge -- 0.001 normalized == 1px.
+local function runPinSeparation()
+    local PLUGIN_NAME = "Homestead"
+    local noPoi = { mapID = 101, width = 1000, height = 1000 }
+
+    -- (g) two pins 1px apart end up 4px apart, each having moved ~1.5px
+    -- along the axis between them.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, noPoi)
+        local pinA = makeNudgePin(PLUGIN_NAME, 0.5, 0.5)
+        local pinB = makeNudgePin(PLUGIN_NAME, 0.501, 0.5) -- 1px away
+        pins[#pins + 1] = pinA
+        pins[#pins + 1] = pinB
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pinA.setPositionCalls == 1 and pinB.setPositionCalls == 1, "both pins in a too-close pair must be written back exactly once")
+        check(approxEqual(pinA.x, 0.4985) and approxEqual(pinB.x, 0.5025),
+            "each pin must move ~1.5px away along the connecting axis, got A.x=" .. tostring(pinA.x) .. " B.x=" .. tostring(pinB.x))
+        check(approxEqual(pinA.y, 0.5) and approxEqual(pinB.y, 0.5), "separation along a purely horizontal pair must not touch Y")
+        check(approxEqual((pinB.x - pinA.x) * 1000, 4), "the pair must end up exactly 4px apart")
+        rt.restore()
+    end
+
+    -- (h) two EXACTLY coincident pins separate to 4px apart in opposite
+    -- directions. HNH's own data can never actually produce this (see the
+    -- comment on SeparateOwnPins) -- it's the divide-by-zero guard -- so the
+    -- direction is a fixed pair, not derived from anything about either pin:
+    -- the first pin of the pair moves right, the second moves left.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, noPoi)
+        local pinA = makeNudgePin(PLUGIN_NAME, 0.5, 0.5)
+        local pinB = makeNudgePin(PLUGIN_NAME, 0.5, 0.5)
+        pins[#pins + 1] = pinA
+        pins[#pins + 1] = pinB
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pinA.setPositionCalls == 1 and pinB.setPositionCalls == 1, "both coincident pins must be nudged")
+        check(approxEqual(pinA.x, 0.502) and approxEqual(pinA.y, 0.5),
+            "the first pin of a coincident pair must move right, got x=" .. tostring(pinA.x) .. " y=" .. tostring(pinA.y))
+        check(approxEqual(pinB.x, 0.498) and approxEqual(pinB.y, 0.5),
+            "the second pin of a coincident pair must move left, got x=" .. tostring(pinB.x) .. " y=" .. tostring(pinB.y))
+        check(approxEqual((pinA.x - pinB.x) * 1000, 4), "a coincident pair must end up exactly 4px apart")
+        rt.restore()
+    end
+
+    -- (i) three pins all within 2px of each other and each other must all
+    -- end up at least 4px apart, within the 3-pass bound.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, noPoi)
+        local pinA = makeNudgePin(PLUGIN_NAME, 0.5, 0.5)
+        local pinB = makeNudgePin(PLUGIN_NAME, 0.501, 0.5) -- 1px from A
+        local pinC = makeNudgePin(PLUGIN_NAME, 0.5, 0.501) -- 1px from A, 1.41px from B
+        pins[#pins + 1] = pinA
+        pins[#pins + 1] = pinB
+        pins[#pins + 1] = pinC
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        local function pxDist(p1, p2)
+            return math.sqrt(((p1.x - p2.x) * 1000) ^ 2 + ((p1.y - p2.y) * 1000) ^ 2)
+        end
+        check(pxDist(pinA, pinB) >= 3.9, "A-B must end up ~4px apart, got " .. tostring(pxDist(pinA, pinB)))
+        check(pxDist(pinA, pinC) >= 3.9, "A-C must end up ~4px apart, got " .. tostring(pxDist(pinA, pinC)))
+        check(pxDist(pinB, pinC) >= 3.9, "B-C must end up ~4px apart, got " .. tostring(pxDist(pinB, pinC)))
+        rt.restore()
+    end
+
+    -- (j) pins already 10px apart are left completely untouched.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, noPoi)
+        local pinA = makeNudgePin(PLUGIN_NAME, 0.5, 0.5)
+        local pinB = makeNudgePin(PLUGIN_NAME, 0.51, 0.5) -- 10px away
+        pins[#pins + 1] = pinA
+        pins[#pins + 1] = pinB
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pinA.setPositionCalls == 0 and pinB.setPositionCalls == 0, "pins already far enough apart must not be nudged")
+        check(pinA.x == 0.5 and pinB.x == 0.51, "untouched pins' coordinates must be exact")
+        rt.restore()
+    end
+
+    -- (k) drift guard for the combined pass: another plugin's refresh must
+    -- not run pin-separation on HNH's own pins either.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, noPoi)
+        local pinA = makeNudgePin(PLUGIN_NAME, 0.5, 0.5)
+        local pinB = makeNudgePin(PLUGIN_NAME, 0.501, 0.5) -- 1px away -- would separate on HNH's own refresh
+        pins[#pins + 1] = pinA
+        pins[#pins + 1] = pinB
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, "OtherPlugin")
+        check(pinA.setPositionCalls == 0 and pinB.setPositionCalls == 0, "another plugin's refresh must never run pin-separation on HNH's own pins")
+        rt.restore()
+    end
+
+    -- Inner foreign-plugin guard (a DIFFERENT guard from (k) above): a pin
+    -- belonging to ANOTHER plugin, sitting within POI range AND within 4px
+    -- of one of ours, must never be moved by either mechanism. (k) proves
+    -- OUR pins don't move on SOMEONE ELSE's refresh (the outer pluginName
+    -- gate in the hook); this proves THEIR pins don't move on OUR OWN
+    -- refresh (the inner pluginName filter inside
+    -- ApplyPinPlacementAdjustments' own pin collection). Checked across two
+    -- of our own refreshes, not just one.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, {
+            mapID = 101, width = 1000, height = 1000,
+            areaPoiIDs = { 1 }, poiPositions = { [1] = { x = 0.5, y = 0.5 } },
+        })
+        local ourPin = makeNudgePin(PLUGIN_NAME, 0.5, 0.5)
+        local foreignPin = makeNudgePin("OtherPlugin", 0.5005, 0.5) -- within POI range AND within 4px of ourPin
+        pins[#pins + 1] = ourPin
+        pins[#pins + 1] = foreignPin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(foreignPin.setPositionCalls == 0, "a foreign plugin's pin must never be moved by our own placement adjustments")
+        check(foreignPin.x == 0.5005 and foreignPin.y == 0.5, "a foreign plugin's pin's coordinates must be completely untouched")
+        rt.restore()
+    end
+
+    -- PIN_SEPARATION_MAX_PASSES is load-bearing on a dense cluster: five
+    -- pins 0.5px apart don't fully spread out in a single pass (a 3-pin
+    -- fixture converges in one pass and can't tell 1 from 3 apart -- this
+    -- is why (i) above didn't already cover it). Expected values below are
+    -- computed by running the shipped algorithm itself (constants and
+    -- pairwise loop copied verbatim) against this exact fixture: 1 pass
+    -- leaves the closest pair at 0.296875px; the shipped 3-pass cap reaches
+    -- 2.878418px -- clearly better, though still short of the full 4px on a
+    -- cluster this dense, matching the softened header comment above.
+    do
+        local pins = {}
+        local rt = loadNudgeRuntime(pins, { mapID = 101, width = 1000, height = 1000 })
+        for i = 1, 5 do
+            local pin = makeNudgePin(PLUGIN_NAME, 0.5 + (i - 1) * 0.0005, 0.5) -- 0.5px spacing
+            pins[#pins + 1] = pin
+        end
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        local closest = math.huge
+        for i = 1, #pins - 1 do
+            for j = i + 1, #pins do
+                local d = math.sqrt(((pins[i].x - pins[j].x) * 1000) ^ 2 + ((pins[i].y - pins[j].y) * 1000) ^ 2)
+                if d < closest then closest = d end
+            end
+        end
+        check(approxEqual(closest, 2.878418), "a 5-pin dense cluster must converge to the 3-pass result (2.878418px), got " .. tostring(closest) .. "px")
+        check(closest > 0.296875 + 0.01, "the 3-pass result must clearly beat what a single pass alone achieves (0.296875px)")
+        rt.restore()
+    end
+
+    -- The per-call reset of the moved-flag scratch array: a stale `true`
+    -- left by a PREVIOUS refresh (module-level arrays persist across calls
+    -- within one loaded session) must not cause a pointless SetPosition on
+    -- a LATER refresh where nothing actually needs to move.
+    do
+        local pins = {}
+        local mocks = { mapID = 101, width = 1000, height = 1000, areaPoiIDs = { 1 }, poiPositions = { [1] = { x = 0.5, y = 0.5 } } }
+        local rt = loadNudgeRuntime(pins, mocks)
+        local pin = makeNudgePin(PLUGIN_NAME, 0.51, 0.51) -- within 18px of the POI
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.setPositionCalls == 1, "setup: the pin must be nudged on the first refresh")
+
+        -- Second refresh: no POI left to dodge, still the only pin (so no
+        -- separation either). HandyNotes always re-acquires with the
+        -- ORIGINAL data coordinate on a real refresh -- model that by
+        -- resetting the mock pin's position by hand before the call.
+        mocks.areaPoiIDs, mocks.poiPositions = nil, nil
+        pin.x, pin.y = 0.51, 0.51
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.setPositionCalls == 1,
+            "a refresh where nothing moves must not re-write the pin, even if a stale moved-flag from the previous refresh were left set")
+        rt.restore()
+    end
+end
+
+-- HNH-020 follow-up (gold border): a plain gold border on our own world-map
+-- pins, matching Blizzard's item-slot border art.
+local function runVendorPinBorder()
+    local PLUGIN_NAME = "Homestead"
+
+    -- (l) our pin gets exactly one border texture across repeated refreshes
+    -- (never recreated), shown, gold, and using Blizzard's own border file.
+    do
+        local pins = {}
+        local rt = loadPinRuntime(pins)
+        local pin = makeBorderPin(PLUGIN_NAME)
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.createTextureCalls == 1, "the border texture must be created exactly once across repeated refreshes")
+        local border = pin._hnhBorder
+        check(border ~= nil, "the pin must have a border texture recorded on it")
+        check(border.shown == true, "the border must be shown")
+        check(border.file == "Interface\\Common\\WhiteIconFrame", "the border must use Blizzard's own item-slot border texture")
+        check(border.color and border.color[1] == 1 and border.color[2] == 0.82 and border.color[3] == 0,
+            "the border must be tinted standard gold, got " .. tostring(border.color and table.concat(border.color, ",")))
+        check(border.allPointsTarget == pin.texture, "the border must be anchored to the pin's own icon texture")
+        check(pin.createTextureArgs and pin.createTextureArgs[2] == "OVERLAY",
+            "the border must be created on the OVERLAY layer, got " .. tostring(pin.createTextureArgs and pin.createTextureArgs[2]))
+        check(pin.createTextureArgs and pin.createTextureArgs[4] == 1,
+            "the border must be created one sublevel above the icon's default, got " .. tostring(pin.createTextureArgs and pin.createTextureArgs[4]))
+        rt.restore()
+    end
+
+    -- (m) a pin reassigned to a different plugin has its border hidden on
+    -- THAT plugin's own refresh -- mirrors the frame-level reset branch.
+    do
+        local pins = {}
+        local rt = loadPinRuntime(pins)
+        local pin = makeBorderPin(PLUGIN_NAME)
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin._hnhBorder.shown == true, "setup: the border must be shown after our own refresh")
+        pin.pluginName = "OtherPlugin" -- HandyNotes reassigned it from its pool
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, "OtherPlugin")
+        check(pin._hnhBorder.shown == false, "a pin reassigned to a different plugin must have its border hidden")
+        check(pin.createTextureCalls == 1, "the border texture must never be destroyed or recreated, only hidden")
+        rt.restore()
+    end
+
+    -- (n) a pin HandyNotes gives back to us later shows its border again --
+    -- reusing the SAME texture, not creating a new one.
+    do
+        local pins = {}
+        local rt = loadPinRuntime(pins)
+        local pin = makeBorderPin(PLUGIN_NAME)
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        local firstBorder = pin._hnhBorder
+        pin.pluginName = "OtherPlugin"
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, "OtherPlugin")
+        check(firstBorder.shown == false, "setup: the border must be hidden after reassignment")
+        pin.pluginName = PLUGIN_NAME -- HandyNotes gave the pin back to us
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin._hnhBorder == firstBorder, "re-acquiring the pin must reuse the SAME border texture, not create a new one")
+        check(pin._hnhBorder.shown == true, "the border must be shown again once the pin is ours again")
+        check(pin.createTextureCalls == 1, "re-acquiring the pin must not create a second border texture")
+        rt.restore()
+    end
+
+    -- Foreign-plugin guard: a pin belonging to ANOTHER plugin, present on
+    -- the canvas during OUR OWN refresh, must never get a border -- unlike
+    -- the placement pass, a border is only ever hidden by the frame-level
+    -- reset branch's `pin._hnhRaised` check, and a pin that was never ours
+    -- never has that flag, so a leaked border would stay gold on that
+    -- frame for the rest of its life in the pool.
+    do
+        local pins = {}
+        local rt = loadPinRuntime(pins)
+        local ourPin = makeBorderPin(PLUGIN_NAME)
+        local foreignPin = makeBorderPin("OtherPlugin")
+        pins[#pins + 1] = ourPin
+        pins[#pins + 1] = foreignPin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(ourPin.createTextureCalls == 1 and ourPin._hnhBorder ~= nil and ourPin._hnhBorder.shown == true,
+            "our own pin must still get a border on our own refresh")
+        check(foreignPin.createTextureCalls == 0, "a foreign plugin's pin must never have a border texture created on it")
+        check(foreignPin._hnhBorder == nil, "a foreign plugin's pin must never end up with a recorded border")
+        rt.restore()
+    end
+end
+
+-- HNH-020 follow-up (pin size): our own world-map pins 1px larger than
+-- HandyNotes' own default.
+local function runVendorPinSize()
+    local PLUGIN_NAME = "Homestead"
+
+    -- our own refresh grows a 12x12 pin (HandyNotes' own OnAcquired
+    -- default) to 13x13.
+    do
+        local pins = {}
+        local rt = loadPinRuntime(pins)
+        local pin = makePin(PLUGIN_NAME)
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.width == 13 and pin.height == 13,
+            "our own refresh must grow a pin from 12x12 to 13x13, got " .. tostring(pin.width) .. "x" .. tostring(pin.height))
+        rt.restore()
+    end
+
+    -- a foreign plugin's pin, present during our own refresh, is untouched.
+    do
+        local pins = {}
+        local rt = loadPinRuntime(pins)
+        local ourPin = makePin(PLUGIN_NAME)
+        local foreignPin = makePin("OtherPlugin")
+        pins[#pins + 1] = ourPin
+        pins[#pins + 1] = foreignPin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(ourPin.width == 13 and ourPin.height == 13, "our own pin must still grow")
+        check(foreignPin.width == 12 and foreignPin.height == 12, "a foreign plugin's pin must never be resized")
+        check(foreignPin.setSizeCalls == 0, "a foreign plugin's pin must never have SetSize called on it")
+        rt.restore()
+    end
+
+    -- a second, foreign plugin's refresh does not grow ours again.
+    do
+        local pins = {}
+        local rt = loadPinRuntime(pins)
+        local pin = makePin(PLUGIN_NAME)
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.width == 13 and pin.height == 13, "setup: our pin must be 13x13 after our own refresh")
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, "OtherPlugin")
+        check(pin.width == 13 and pin.height == 13, "another plugin's refresh must never grow our pin again")
+        rt.restore()
+    end
+
+    -- a re-acquire (HandyNotes:OnAcquired resets the size to 12x12 on
+    -- every acquire, modeled here by resetting the mock by hand) followed
+    -- by our next refresh must land at 13x13 again, not stack to 14x14.
+    do
+        local pins = {}
+        local rt = loadPinRuntime(pins)
+        local pin = makePin(PLUGIN_NAME)
+        pins[#pins + 1] = pin
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.width == 13 and pin.height == 13, "setup: the first refresh must grow the pin to 13x13")
+        pin.width, pin.height = 12, 12 -- HandyNotes re-acquired the pin, resetting its size
+        HandyNotes.WorldMapDataProvider.RefreshPlugin(HandyNotes.WorldMapDataProvider, PLUGIN_NAME)
+        check(pin.width == 13 and pin.height == 13,
+            "a re-acquired pin must grow to 13x13 again, not stack to 14x14, got " .. tostring(pin.width) .. "x" .. tostring(pin.height))
+        rt.restore()
+    end
+end
+
 local function run()
     local standalone = { loadRuntime({}, "Alliance") }
     check(standalone[1], "standalone registration did not capture a plugin handler")
@@ -1161,12 +1963,17 @@ local function run()
     -- Every LibStub call in the file sits past the login guard, so a zero call
     -- count is what actually separates the no-op path from a live load; the
     -- checks run before the registration check so a disabled guard trips them.
-    local homestead = { loadRuntime({ Homestead = true }, "Alliance") }
+    -- `{}` for `pins` (12th arg) opts into the pin-layering mocks (see
+    -- loadRuntime) so hookInstallations would actually catch
+    -- InstallVendorPinLayering running on the wrong side of this guard --
+    -- without opting in, hooksecurefunc stays undefined and the hook install
+    -- would already no-op on its own guard, proving nothing about ordering.
+    local homestead = { loadRuntime({ Homestead = true }, "Alliance", nil, nil, nil, nil, nil, nil, nil, nil, nil, {}) }
     check(homestead[2].hookInstallations == 0 and homestead[15]() == 0 and homestead[16]() == 0,
         "Homestead-enabled path installed a hook or initialized its libraries past its login listener")
     check(not homestead[1], "Homestead-enabled path registered the plugin")
     homestead[8]()
-    local devBuild = { loadRuntime({ Homestead_DevBuild = true }, "Alliance") }
+    local devBuild = { loadRuntime({ Homestead_DevBuild = true }, "Alliance", nil, nil, nil, nil, nil, nil, nil, nil, nil, {}) }
     check(devBuild[2].hookInstallations == 0 and devBuild[15]() == 0 and devBuild[16]() == 0,
         "Homestead_DevBuild-enabled path installed a hook or initialized its libraries past its login listener")
     check(not devBuild[1], "Homestead_DevBuild-enabled path registered the plugin")
@@ -1272,6 +2079,11 @@ local function run()
     runVendorCostRender()
     runVendorCostRenderColdToWarm()
     runVendorCostRenderInteractiveRemeasure()
+    runVendorPinLayering()
+    runPoiNudge()
+    runPinSeparation()
+    runVendorPinBorder()
+    runVendorPinSize()
 end
 
 local ok, err = xpcall(run, debug.traceback)

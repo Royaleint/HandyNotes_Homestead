@@ -13,6 +13,11 @@ local HNH = {}
 local db
 local iconpath
 
+-- The identifier HNH registers under with HandyNotes -- the same string
+-- RegisterPluginDB, HandyNotes_NotifyUpdate, and (below) each pin's own
+-- pluginName field all use to mean "this plugin".
+local PLUGIN_NAME = "Homestead"
+
 -- Homestead's vendor pins use this Blizzard atlas (PinFrameFactory).
 -- Resolved to a file ID + texcoords at login because HandyNotes applies
 -- icons via SetTexture only.
@@ -1223,7 +1228,7 @@ local options = {
     get = function(info) return db.profile[info.arg] end,
     set = function(info, value)
         db.profile[info.arg] = value
-        HNH:SendMessage("HandyNotes_NotifyUpdate", "Homestead")
+        HNH:SendMessage("HandyNotes_NotifyUpdate", PLUGIN_NAME)
     end,
     args = {
         desc = {
@@ -1251,6 +1256,454 @@ local options = {
 }
 
 -------------------------------------------------------------------------------
+-- Vendor pin layering
+--
+-- HandyNotes' own pin template declares PIN_FRAME_LEVEL_AREA_POI
+-- (HandyNotes.lua:363) -- the SAME band Blizzard's own regular area-POI pins
+-- use (AreaPOIDataProvider.lua:68). That band has range 1
+-- (MapCanvas_PinFrameLevelsManager.lua:146-158), so every pin in it resolves
+-- to the identical frame level and sibling draw order alone decides which
+-- one ends up on top -- effectively a coin flip on every map refresh.
+-- Homestead's own ruling (MapPinProvider.lua:485-496) puts its vendor pins
+-- one band above Area POI, at Gossip, deliberately under quests, world
+-- quests, vignettes, waypoints and map links. That ruling stands for
+-- Homestead. Here it is not enough: Gossip beats Blizzard's REGULAR area
+-- POIs but not its EVENT area POIs (PIN_FRAME_LEVEL_AREA_POI_EVENT, ten
+-- bands higher at Blizzard_WorldMap.lua:274), and a vendor under an event
+-- marker was still unreachable. This addon therefore goes one band above
+-- the event band, to Quest Ping (Blizzard_WorldMap.lua:275) -- the lowest
+-- band that clears it. The precise result: vendor pins draw over every
+-- band registered before :275 -- regular AND event area POIs, map links
+-- (the zone-transition marker: a vendor sitting on one blocks its
+-- right-click navigation, an accepted trade), encounter, contribution
+-- collector, scenario, vignettes, quest offers, bonus objectives and world
+-- quests -- and stay UNDER everything registered after it (:276-287):
+-- tracked content, active / super-tracked quests, group members,
+-- waypoints and the corpse marker. The only other Quest Ping user is the
+-- transient ping halo, which has no mouse handling. This addon can't
+-- change HandyNotes' shared pin template, so it re-types its OWN pins
+-- after HandyNotes places them.
+-------------------------------------------------------------------------------
+
+local VENDOR_PIN_FRAME_LEVEL_TYPE = "PIN_FRAME_LEVEL_QUEST_PING"
+
+-- The frame level is a plain frame property that nothing clears on its own
+-- (HandyNotes releases a pin back to its pool without resetting it, and
+-- reacquiring it for reuse doesn't re-set it either -- see the reset branch
+-- below), so one UseFrameLevelType + ApplyFrameLevel call after HandyNotes
+-- (re)acquires a pin persists for that pin's life in the pool. This does not
+-- need to run per-frame or on zoom/reposition -- only after HandyNotes
+-- places or reassigns pins (see the RefreshPlugin hook below).
+local function RaiseVendorPins()
+    if not WorldMapFrame or not WorldMapFrame.EnumeratePinsByTemplate then return end
+    for pin in WorldMapFrame:EnumeratePinsByTemplate("HandyNotesWorldMapPinTemplate") do
+        if pin.pluginName == PLUGIN_NAME and pin.UseFrameLevelType then
+            pin:UseFrameLevelType(VENDOR_PIN_FRAME_LEVEL_TYPE)
+            pin:ApplyFrameLevel()
+            pin._hnhRaised = true
+        elseif pin._hnhRaised then
+            -- HandyNotes pools pins across plugins, and its template only
+            -- sets PIN_FRAME_LEVEL_AREA_POI once, in OnLoad (at pool
+            -- creation) -- a pin we raised and HandyNotes later reassigned
+            -- to a DIFFERENT plugin would otherwise keep our frame level
+            -- forever. Restore HandyNotes' own default explicitly.
+            pin:UseFrameLevelType("PIN_FRAME_LEVEL_AREA_POI")
+            pin:ApplyFrameLevel()
+            pin._hnhRaised = nil
+            -- The gold border (see the section below) is HNH-only art --
+            -- hide it, the same way the frame level gets reset, whenever
+            -- this pin is reassigned to a different plugin. Never destroy
+            -- the texture: it's reused if we get the pin back later.
+            if pin._hnhBorder then
+                pin._hnhBorder:Hide()
+            end
+        end
+    end
+end
+
+-------------------------------------------------------------------------------
+-- Gold border
+--
+-- A plain gold border on our own world-map pins, matching the look of
+-- Blizzard's own item-slot border art, so a vendor pin reads as a distinct
+-- clickable frame instead of blending into the surrounding icons. World map
+-- only -- minimap pins are untouched.
+--
+-- Drawn whole, with no texcoords, anchored to the icon's own bounds -- that
+-- is how Blizzard itself uses this art everywhere it appears (e.g.
+-- Blizzard_EncounterJournal.xml's IconBorder, Blizzard_PetCollection.xml's
+-- qualityBorder), not a choice specific to this file.
+-------------------------------------------------------------------------------
+
+local VENDOR_PIN_BORDER_FILE = "Interface\\Common\\WhiteIconFrame"
+local VENDOR_PIN_BORDER_R, VENDOR_PIN_BORDER_G, VENDOR_PIN_BORDER_B = 1, 0.82, 0 -- standard gold
+
+-- Creates the border texture once per pin FRAME and reuses it after --
+-- HandyNotes pools pin frames across plugins and across our own refreshes,
+-- so a given frame only ever needs this once in its whole lifetime, however
+-- many times it gets reassigned between plugins. Anchored to the icon
+-- texture (HandyNotesWorldMapPinTemplate always provides `pin.texture` --
+-- HandyNotes.xml) rather than the pin frame or the parent map, since the
+-- pin's own SetPosition already places the frame -- the border just needs
+-- to track the icon it outlines. Left at the default blend mode so it reads
+-- as a border, not a glow.
+local function EnsureVendorPinBorder(pin)
+    local border = pin._hnhBorder
+    if border then return border end
+
+    border = pin:CreateTexture(nil, "OVERLAY", nil, 1) -- one sublevel above the icon
+    pin._hnhBorder = border
+    border:SetTexture(VENDOR_PIN_BORDER_FILE)
+    border:SetVertexColor(VENDOR_PIN_BORDER_R, VENDOR_PIN_BORDER_G, VENDOR_PIN_BORDER_B)
+    border:SetAllPoints(pin.texture)
+    return border
+end
+
+-- Runs only on HNH's OWN RefreshPlugin call, same as
+-- ApplyPinPlacementAdjustments above and for the same reason: HandyNotes
+-- re-acquires every one of our pins fresh on our own refresh, so this is
+-- the only point that needs to (re)show the border. RaiseVendorPins' reset
+-- branch above handles hiding it again if HandyNotes later reassigns the
+-- pin to a different plugin.
+local function ShowVendorPinBorders()
+    if not WorldMapFrame or not WorldMapFrame.EnumeratePinsByTemplate then return end
+    for pin in WorldMapFrame:EnumeratePinsByTemplate("HandyNotesWorldMapPinTemplate") do
+        if pin.pluginName == PLUGIN_NAME and pin.CreateTexture then
+            EnsureVendorPinBorder(pin):Show()
+        end
+    end
+end
+
+-------------------------------------------------------------------------------
+-- Pin size
+--
+-- 1px larger than HandyNotes' own default, so a vendor pin reads a little
+-- more clearly against the surrounding map icons. The border above tracks
+-- automatically -- it's SetAllPoints to the icon texture, which HandyNotes
+-- itself resizes along with the pin frame.
+-------------------------------------------------------------------------------
+
+local VENDOR_PIN_SIZE_BONUS = 1 -- extra pixels added to HandyNotes' own pin size
+
+-- Runs only on HNH's OWN RefreshPlugin call, alongside ShowVendorPinBorders
+-- above and under the same pluginName guard. No reset step needed on pool
+-- reuse: HandyNotesWorldMapPinMixin:OnAcquired sets
+-- `local size = 12 * db.icon_scale * scale; self:SetSize(size, size)` on
+-- EVERY acquire (HandyNotes.lua:381-382), and RefreshPlugin removes and
+-- reacquires every one of a plugin's pins on every call for that plugin --
+-- so by the time this runs, GetSize() always reads HandyNotes' own fresh
+-- default, never a size we already grew. Reading it and adding
+-- VENDOR_PIN_SIZE_BONUS once is therefore safe with nothing to undo first,
+-- and safe to run exactly once per our own refresh (this pass, like the
+-- border pass, only ever runs once per RefreshPlugin call for HNH).
+local function GrowVendorPinSize()
+    if not WorldMapFrame or not WorldMapFrame.EnumeratePinsByTemplate then return end
+    for pin in WorldMapFrame:EnumeratePinsByTemplate("HandyNotesWorldMapPinTemplate") do
+        if pin.pluginName == PLUGIN_NAME and pin.GetSize and pin.SetSize then
+            local width, height = pin:GetSize()
+            pin:SetSize(width + VENDOR_PIN_SIZE_BONUS, height + VENDOR_PIN_SIZE_BONUS)
+        end
+    end
+end
+
+-------------------------------------------------------------------------------
+-- POI-proximity nudge
+--
+-- Shifts a vendor pin 2px away from any Blizzard point-of-interest pin it
+-- lands on top of, so the POI underneath isn't fully hidden. Frame-level
+-- layering (above) decides who draws on top when two pins occupy the same
+-- spot; this decides whether they occupy the same spot at all.
+--
+-- POI positions come from the C_AreaPoiInfo data APIs, not from Blizzard's
+-- own rendered POI pins -- map data providers dispatch in no defined order,
+-- so Blizzard's POI provider may not have placed its pins yet when
+-- HandyNotes' RefreshPlugin runs. Only regular area POIs and world events
+-- are checked; dungeon entrances, flight points, and delve entrances are
+-- left out -- each of those needs its own availability/CVar guard for a
+-- collision this plugin hasn't been reported to hit. Unlike Homestead's own
+-- dodge, this deliberately does NOT skip world/continent maps -- a
+-- zone-summary or continent-summary pin gets the dodge, the separation pass
+-- below, and the gold border above, the same as an ordinary vendor pin.
+--
+-- The POI list is read once per HNH refresh, not kept live -- a POI that
+-- appears, moves, or despawns while the map stays open isn't picked up
+-- until the next refresh. Cosmetic: the frame-level raise above still keeps
+-- the pin clickable either way.
+-------------------------------------------------------------------------------
+
+-- Both these and PIN_SEPARATION_MIN_PIXELS below are CONTAINER pixels (the
+-- fixed-size map viewport), not screen pixels -- normalized coordinates are
+-- scaled by zoom before they reach the screen, so the on-screen distance
+-- these numbers produce is exact only at full zoom-out and roughly 2-3x
+-- larger at max zoom. The container's own size doesn't change with zoom, so
+-- a given threshold/offset is at least stable across refreshes at any one
+-- zoom level -- it just isn't the same NUMBER of screen pixels at every one.
+local POI_NUDGE_THRESHOLD_PIXELS = 18
+local POI_NUDGE_DISTANCE_PIXELS = 2
+
+-- Guards against a NaN coordinate a broken API call could hand back. NaN
+-- only matters here because NaN comparisons are always false: `not
+-- closestDist` still lets a NaN candidate win the FIRST comparison (there's
+-- nothing to compare it against yet), and it then survives the threshold
+-- check below too, since `NaN > POI_NUDGE_THRESHOLD_PIXELS` is also false.
+-- `n == n` is false only for NaN, so this rejects the coordinate outright
+-- before any of that can happen.
+local function IsFiniteNumber(n)
+    return type(n) == "number" and n == n
+end
+
+local function InsertPoiCandidate(target, x, y)
+    if IsFiniteNumber(x) and IsFiniteNumber(y) then
+        target[#target + 1] = { x = x, y = y }
+    end
+end
+
+local function GetPoiPositionsForMap(mapID)
+    local positions = {}
+    if not C_AreaPoiInfo then return positions end
+
+    -- Regular area POIs (quest hubs, portals, etc.) and world events
+    -- (Saltheril's Soiree, Abundance, etc.) use separate list APIs. Both
+    -- list calls are pcall-guarded: an absent or throwing list API degrades
+    -- to zero candidates from that source instead of aborting the nudge pass.
+    local okPoi, poiIDs = pcall(C_AreaPoiInfo.GetAreaPOIForMap, mapID)
+    if okPoi and poiIDs then
+        for _, poiID in ipairs(poiIDs) do
+            local info = C_AreaPoiInfo.GetAreaPOIInfo(mapID, poiID)
+            if info and info.position then
+                InsertPoiCandidate(positions, info.position.x, info.position.y)
+            end
+        end
+    end
+
+    local okEvent, eventIDs = pcall(C_AreaPoiInfo.GetEventsForMap, mapID)
+    if okEvent and eventIDs then
+        for _, eventID in ipairs(eventIDs) do
+            local info = C_AreaPoiInfo.GetAreaPOIInfo(mapID, eventID)
+            if info and info.position then
+                InsertPoiCandidate(positions, info.position.x, info.position.y)
+            end
+        end
+    end
+
+    return positions
+end
+
+-- Returns the position moved 2px directly away from the closest POI within
+-- the collision threshold, plus whether it actually moved. Unclamped and
+-- doesn't touch the pin -- ApplyPinPlacementAdjustments below clamps once,
+-- after the pin-separation pass has also had a chance to move the pin.
+local function NudgeAwayFromClosestPoi(x, y, poiPositions, width, height)
+    local closestPoi, closestDist
+    for _, poi in ipairs(poiPositions) do
+        local dx = (x - poi.x) * width
+        local dy = (y - poi.y) * height
+        local dist = math.sqrt(dx * dx + dy * dy)
+        if not closestDist or dist < closestDist then
+            closestDist = dist
+            closestPoi = poi
+        end
+    end
+
+    if not closestPoi or closestDist > POI_NUDGE_THRESHOLD_PIXELS then
+        return x, y, false
+    end
+
+    local dirX, dirY
+    if closestDist == 0 then
+        dirX, dirY = 1, 0 -- coincident with the POI -- push right
+    else
+        dirX = ((x - closestPoi.x) * width) / closestDist
+        dirY = ((y - closestPoi.y) * height) / closestDist
+    end
+
+    return x + (dirX * POI_NUDGE_DISTANCE_PIXELS) / width,
+           y + (dirY * POI_NUDGE_DISTANCE_PIXELS) / height,
+           true
+end
+
+-------------------------------------------------------------------------------
+-- Pin self-avoidance
+--
+-- Separate from the POI dodge above: two of HNH's OWN vendor pins can also
+-- end up within a few pixels of each other. This pushes any pair closer than
+-- 4px apart away from each other, up to PIN_SEPARATION_MAX_PASSES times or
+-- until a pass moves nothing -- not guaranteed to land every pair at exactly
+-- 4px on a dense cluster, see SeparateOwnPins' own comment below --
+-- independent of whether either one is also dodging a POI.
+-------------------------------------------------------------------------------
+
+local PIN_SEPARATION_MIN_PIXELS = 4 -- container pixels -- see the note above POI_NUDGE_THRESHOLD_PIXELS
+local PIN_SEPARATION_MAX_PASSES = 3
+
+-- Pushes any two of HNH's own pins closer than PIN_SEPARATION_MIN_PIXELS
+-- apart so they end up exactly that far apart, each moving half the
+-- deficit. Works in place on the xs/ys/moved scratch arrays -- no table
+-- allocated here, only scalar reads and writes. Runs up to
+-- PIN_SEPARATION_MAX_PASSES times or until a full pass moves nothing: one
+-- pass only resolves each pair once, and resolving one pair can push a pin
+-- into a THIRD pin's range, so a stack of 3+ needs more than one pass to
+-- fully spread out.
+--
+-- The dist == 0 (exactly coincident) branch is defensive, not a case HNH's
+-- own data can produce: a map's node table is keyed by coordinate, and
+-- HandyNotes:getXY is injective, so two of our pins can never legitimately
+-- share a position. It's kept because dividing by a zero distance would
+-- otherwise produce a NaN offset (a real, observed failure if this branch is
+-- removed) -- with no real coincidence to break a tie for, the two pins in
+-- the pair just get a fixed, opposite push (first pin right, second pin
+-- left) rather than a real direction computed from anything.
+local function SeparateOwnPins(xs, ys, moved, count, width, height)
+    for _ = 1, PIN_SEPARATION_MAX_PASSES do
+        local movedAny = false
+        for i = 1, count - 1 do
+            for j = i + 1, count do
+                local dx = (xs[i] - xs[j]) * width
+                local dy = (ys[i] - ys[j]) * height
+                local dist = math.sqrt(dx * dx + dy * dy)
+                if dist < PIN_SEPARATION_MIN_PIXELS then
+                    local dirIX, dirIY, dirJX, dirJY
+                    if dist == 0 then
+                        dirIX, dirIY = 1, 0 -- first pin of the pair -- push right
+                        dirJX, dirJY = -1, 0 -- second pin -- push left
+                    else
+                        dirIX, dirIY = dx / dist, dy / dist
+                        dirJX, dirJY = -dirIX, -dirIY
+                    end
+                    local halfDeficit = (PIN_SEPARATION_MIN_PIXELS - dist) / 2
+                    xs[i] = xs[i] + (dirIX * halfDeficit) / width
+                    ys[i] = ys[i] + (dirIY * halfDeficit) / height
+                    xs[j] = xs[j] + (dirJX * halfDeficit) / width
+                    ys[j] = ys[j] + (dirJY * halfDeficit) / height
+                    moved[i] = true
+                    moved[j] = true
+                    movedAny = true
+                end
+            end
+        end
+        if not movedAny then break end
+    end
+end
+
+-- Reusable scratch arrays for ApplyPinPlacementAdjustments below -- module
+-- locals so nothing per-pin gets allocated on a call that runs on every HNH
+-- refresh. Parallel arrays (indexed 1..pinScratchCount), not an array of
+-- per-pin tables.
+local pinScratchPins = {}
+local pinScratchX = {}
+local pinScratchY = {}
+local pinScratchInset = {}
+local pinScratchMoved = {}
+local pinScratchCount = 0
+
+-- Runs once per HNH's OWN RefreshPlugin call (see the pluginName guard in
+-- InstallVendorPinLayering's hook below) -- never on another plugin's
+-- refresh. HandyNotes removes and re-acquires every one of a plugin's pins
+-- on each RefreshPlugin call for that plugin (WorldMapDataProvider:
+-- RefreshPlugin in HandyNotes.lua), and a freshly acquired pin's OnAcquired
+-- sets its position straight from the original, un-adjusted data coordinate.
+-- So GetPosition() below always reads the original coordinate fresh, even on
+-- a plugin's second or third refresh -- adjusting it again lands on the same
+-- spot instead of drifting further away each time.
+--
+-- Two adjustments run in sequence, both in the same container-pixel space:
+-- each pin dodges the nearest Blizzard POI first, then HNH's own pins are
+-- pushed apart from each other. Both read and write the SAME in-memory
+-- position for a pin (the scratch arrays below), so a POI dodge that moves a
+-- pin toward a sibling is already accounted for by the time the separation
+-- pass runs -- and the separation pass never re-triggers the POI check. That
+-- also means the separation pass CAN move a pin back within POI range (a 2px
+-- dodge followed by a 4px separation can net out closer to the POI than the
+-- dodge alone would have left it) -- accepted, not re-checked, since chasing
+-- that would mean re-running both passes until neither moves anything.
+--
+-- Pins are enumerated before the POI list is even fetched, so a map with
+-- none of our pins on it (most maps, most of the time) never pays for the
+-- POI query at all.
+local function ApplyPinPlacementAdjustments()
+    if not WorldMapFrame or not WorldMapFrame.GetMapID or not WorldMapFrame.GetCanvasContainer
+            or not WorldMapFrame.EnumeratePinsByTemplate then
+        return
+    end
+
+    local mapID = WorldMapFrame:GetMapID()
+    if not mapID then return end
+
+    local container = WorldMapFrame:GetCanvasContainer()
+    if not container then return end
+
+    local width, height = container:GetWidth(), container:GetHeight()
+    if not width or not height or width <= 0 or height <= 0 then return end
+
+    pinScratchCount = 0
+    for pin in WorldMapFrame:EnumeratePinsByTemplate("HandyNotesWorldMapPinTemplate") do
+        if pin.pluginName == PLUGIN_NAME and pin.GetPosition and pin.SetPosition then
+            local x, y, insetIndex = pin:GetPosition()
+            if IsFiniteNumber(x) and IsFiniteNumber(y) then
+                local index = pinScratchCount + 1
+                pinScratchCount = index
+                pinScratchPins[index] = pin
+                pinScratchX[index] = x
+                pinScratchY[index] = y
+                pinScratchInset[index] = insetIndex
+                pinScratchMoved[index] = false
+            end
+        end
+    end
+
+    if pinScratchCount == 0 then return end
+
+    local poiPositions = GetPoiPositionsForMap(mapID)
+    if #poiPositions > 0 then
+        for index = 1, pinScratchCount do
+            local x, y, moved = NudgeAwayFromClosestPoi(pinScratchX[index], pinScratchY[index], poiPositions, width, height)
+            pinScratchX[index] = x
+            pinScratchY[index] = y
+            pinScratchMoved[index] = moved
+        end
+    end
+
+    SeparateOwnPins(pinScratchX, pinScratchY, pinScratchMoved, pinScratchCount, width, height)
+
+    for index = 1, pinScratchCount do
+        if pinScratchMoved[index] then
+            local x = math.min(math.max(pinScratchX[index], 0.01), 0.99)
+            local y = math.min(math.max(pinScratchY[index], 0.01), 0.99)
+            pinScratchPins[index]:SetPosition(x, y, pinScratchInset[index])
+        end
+    end
+end
+
+local vendorPinLayeringInstalled = false
+
+local function InstallVendorPinLayering()
+    if vendorPinLayeringInstalled or not HandyNotes.WorldMapDataProvider or not hooksecurefunc then return end
+    vendorPinLayeringInstalled = true
+    -- Runs on EVERY plugin's RefreshPlugin, not only ours. RaiseVendorPins'
+    -- own pluginName check already restricts which pins get RAISED to HNH's
+    -- own, but the RESET branch must run whenever a pin we raised could have
+    -- been reassigned to a DIFFERENT plugin by HandyNotes' pool -- and that
+    -- can happen on any plugin's own refresh (its pin count growing pulls a
+    -- released, still-raised pin of ours out of the pool), not only ours.
+    hooksecurefunc(HandyNotes.WorldMapDataProvider, "RefreshPlugin", function(_, pluginName)
+        RaiseVendorPins()
+        -- The placement adjustments, the border, and the size bonus, unlike
+        -- the reset branch above, only ever need to run on HNH's OWN
+        -- refresh -- our pins aren't re-acquired on someone else's refresh,
+        -- so running them then would push an already-adjusted pin further
+        -- away every time (adjustments), do nothing new (the border is
+        -- already shown), or grow an already-grown pin again (size),
+        -- drifting or repeating work with every unrelated map refresh
+        -- instead of settling once per HNH refresh.
+        if pluginName == PLUGIN_NAME then
+            ApplyPinPlacementAdjustments()
+            ShowVendorPinBorders()
+            GrowVendorPinSize()
+        end
+    end)
+end
+
+-------------------------------------------------------------------------------
 -- Registration
 -------------------------------------------------------------------------------
 
@@ -1273,10 +1726,11 @@ frame:SetScript("OnEvent", function(self)
     LibStub("AceEvent-3.0"):Embed(HNH)
 
     RegisterSummaryMapProvider()
+    InstallVendorPinLayering()
 
-    HandyNotes:RegisterPluginDB("Homestead", HNH, options)
+    HandyNotes:RegisterPluginDB(PLUGIN_NAME, HNH, options)
 
     -- HandyNotes' own OnEnable pin sweep ran before this registration;
     -- without this notify, minimap pins would not appear until a zone change.
-    HNH:SendMessage("HandyNotes_NotifyUpdate", "Homestead")
+    HNH:SendMessage("HandyNotes_NotifyUpdate", PLUGIN_NAME)
 end)

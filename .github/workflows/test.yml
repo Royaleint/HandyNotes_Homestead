@@ -1,0 +1,40 @@
+# Test gate: luacheck plus every script under tests/, on every push and pull
+# request. Before this, the only workflow was release.yml, and it runs
+# packaging checks only (TOC-versus-zip, CurseForge/Wago upload) — nothing
+# lints the code or runs the data/behavior tests on the plugin side. This
+# gate catches a hand-edited, malformed, or unstamped Data.lua, or a Lua
+# error introduced anywhere else in the addon, before it ships. It cannot
+# catch a Data.lua that is well-formed but stale against Homestead's own
+# source data — that is the fidelity checker's job, and it needs the
+# private repo this CI does not have.
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.1"
+
+      - uses: leafo/gh-actions-luarocks@v4
+
+      - name: Install luacheck
+        run: luarocks install luacheck
+
+      - name: Luacheck
+        run: luacheck HandyNotes_Homestead.lua Data.lua tests --no-color
+
+      - name: Run tests
+        run: |
+          set -e
+          for test_file in tests/*.lua; do
+            echo "== $test_file =="
+            lua "$test_file"
+          done

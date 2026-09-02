@@ -7,6 +7,10 @@ ignore = { "212/self" }
 
 exclude_files = {
     "Libs/",
+    -- luacheck reads only this root config, so "Libs/" above does NOT cover
+    -- a worktree's own nested Libs/ (e.g. .worktrees/*/Libs/) — this entry
+    -- is what keeps local runs from re-linting stale worktree checkouts.
+    ".worktrees/",
 }
 
 globals = {

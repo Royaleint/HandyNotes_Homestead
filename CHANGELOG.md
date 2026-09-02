@@ -14,6 +14,8 @@ ships an EMPTY changelog to CurseForge/Wago/GitHub on a green CI run.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-02
+
 ### Added
 
 - Vendor tooltips now show item prices, with coin and currency icons.

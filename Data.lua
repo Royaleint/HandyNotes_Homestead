@@ -1,7 +1,7 @@
 --[[
     HandyNotes_Homestead - Data
     GENERATED from Homestead vendor data: do not hand-edit.
-    Source: Homestead v2.10.0
+    Source: Homestead v2.10.1
 ]]
 
 local _, ns = ...
@@ -153,7 +153,6 @@ ns.Nodes = {
     },
     [622] = {
         [41105960] = 85950,
-        [44407520] = 86698,
         [44907480] = 85946,
         [46607680] = 85932,
     },
@@ -858,16 +857,6 @@ ns.Vendors = {
             { id = 258743, price = 4000000, currencies = { { id = 823, amount = 800 } } },
             { id = 258746, price = 7500000, currencies = { { id = 823, amount = 1500 } } },
             { id = 258747, price = 3500000, currencies = { { id = 823, amount = 700 } } },
-        },
-    },
-    [86698] = {
-        name = "Shadow-Sage Brakoss",
-        zone = "Stormshield",
-        subzone = "Town Hall",
-        faction = "Alliance",
-        items = {
-            { id = 244533, price = 500000 },
-            { id = 251545, price = 1000000 },
         },
     },
     [86776] = {
@@ -3836,18 +3825,18 @@ ns.Vendors = {
         zone = "Silvermoon City",
         subzone = "Falconwing Square",
         items = {
-            { id = 268457, currencies = { { id = 3393, amount = 50 } } },
-            { id = 269613, currencies = { { id = 3393, amount = 30 } } },
-            { id = 269614, currencies = { { id = 3393, amount = 15 } } },
-            { id = 269636, currencies = { { id = 3393, amount = 15 } } },
-            { id = 269641, currencies = { { id = 3393, amount = 50 } } },
-            { id = 271162, currencies = { { id = 3393, amount = 120 } } },
-            { id = 272441, currencies = { { id = 3393, amount = 10 } } },
-            { id = 272442, currencies = { { id = 3393, amount = 20 } } },
-            { id = 272443, currencies = { { id = 3393, amount = 20 } } },
-            { id = 272444, currencies = { { id = 3393, amount = 10 } } },
-            { id = 272445, currencies = { { id = 3393, amount = 10 } } },
-            { id = 272446, currencies = { { id = 3393, amount = 10 } } },
+            { id = 268457, currencies = { { id = 3316, amount = 400 } } },
+            { id = 269613, currencies = { { id = 3316, amount = 350 } } },
+            { id = 269614, currencies = { { id = 3316, amount = 250 } } },
+            { id = 269636, currencies = { { id = 3316, amount = 250 } } },
+            { id = 269641, currencies = { { id = 3316, amount = 400 } } },
+            { id = 271162, currencies = { { id = 3316, amount = 750 } } },
+            { id = 272441, currencies = { { id = 3316, amount = 200 } } },
+            { id = 272442, currencies = { { id = 3316, amount = 300 } } },
+            { id = 272443, currencies = { { id = 3316, amount = 300 } } },
+            { id = 272444, currencies = { { id = 3316, amount = 200 } } },
+            { id = 272445, currencies = { { id = 3316, amount = 200 } } },
+            { id = 272446, currencies = { { id = 3316, amount = 200 } } },
         },
     },
     [265581] = {

@@ -4,11 +4,12 @@
   "release_branch": "main",
   "clean_roots": [".", "HNH_Dev"],
   "gate2": {
-    "mode": "automated",
+    "mode": "manual-confirm",
     "source": "completed",
     "source_path": "HNH_Dev/HNH_Completed.md",
     "field": "Completed",
-    "marker_pattern": "Gate 2 ((in-game )?PASS|.*passed)"
+    "marker_pattern": "Gate 2 ((in-game )?PASS|.*passed)",
+    "note": "2026-09-02: manual-confirm while ticket state lives on GitHub issues (STU-141 pivot) and the guard still reads the frozen HNH_Completed.md; revert to automated once the guard learns an issues source. Homestead precedent: Home_Dev 7489295."
   },
   "version_categories": [
     { "pattern": "Breaking", "category": "major" },

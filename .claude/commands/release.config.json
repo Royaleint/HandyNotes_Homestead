@@ -32,6 +32,5 @@
     "confidentiality_mode": "none",
     "manual_changelog_generated": true
   },
-  "publication_targets": ["CurseForge", "GitHub"],
-  "commit_trailer": "Co-Authored-By: Royaleint and Claude Code"
+  "publication_targets": ["CurseForge", "GitHub"]
 }

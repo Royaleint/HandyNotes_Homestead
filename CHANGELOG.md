@@ -14,6 +14,14 @@ ships an EMPTY changelog to CurseForge/Wago/GitHub on a green CI run.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-14
+
+### Fixed
+
+- Reduced the performance cost of vendor tooltips while item names and
+  prices are still loading. The difference is largest on vendors with
+  many wares.
+
 ## [1.1.0] - 2026-09-02
 
 ### Added

@@ -1058,12 +1058,27 @@ local function EnsureInteractiveTooltip()
     return frame
 end
 
+-- Coalesce item-load callbacks that land in the same frame. A large vendor
+-- can have many uncached ware names or reagent costs (RefreshVendorItems
+-- below fires one RequestItemLoad per miss), and ContinueOnItemLoad can
+-- complete several of them in one batch -- one completed item is enough to
+-- repaint the tooltip once for that frame instead of once per item, which is
+-- the O(n^2) hover cost HNH-009 exists to bound.
+local function QueueTooltipRefresh(token, render)
+    if token.refreshQueued then return end
+    token.refreshQueued = true
+    C_Timer.After(0, function()
+        token.refreshQueued = false
+        if currentHover == token then render(token.vendor) end
+    end)
+end
+
 -- Shared by the ware-name request below and the reagent-cost request: asks
--- the client to load one item's data and re-renders the still-active hover
--- when it lands. Two call sites, one callback shape.
+-- the client to load one item's data and queues a re-render of the still-
+-- active hover when it lands. Two call sites, one callback shape.
 local function RequestItemLoad(itemID, token, render)
     Item:CreateFromItemID(itemID):ContinueOnItemLoad(function()
-        if currentHover == token then render(token.vendor) end
+        if currentHover == token then QueueTooltipRefresh(token, render) end
     end)
 end
 

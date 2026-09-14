@@ -43,6 +43,7 @@ read_globals = {
     "C_Map",
     "C_SuperTrack",
     "C_Texture",
+    "C_Timer",
     "WorldMapFrame",
     "hooksecurefunc",
     "CreateFromMixins",

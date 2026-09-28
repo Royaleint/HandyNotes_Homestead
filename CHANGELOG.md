@@ -14,6 +14,19 @@ ships an EMPTY changelog to CurseForge/Wago/GitHub on a green CI run.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-09-27
+
+### Changed
+
+- Vendor data refreshed from Homestead 2.11.0.
+
+### Fixed
+
+- Corrected 41 vendor prices for patch 12.1, mostly at Draenor and
+  Undermine vendors.
+- 9 items were missing from vendors in Arcantina, Silvermoon City and the
+  Vaults of Atal'Utek. They now appear in those vendors' tooltips.
+
 ## [1.1.1] - 2026-09-14
 
 ### Fixed

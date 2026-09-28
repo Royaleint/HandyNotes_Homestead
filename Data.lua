@@ -1,7 +1,7 @@
 --[[
     HandyNotes_Homestead - Data
     GENERATED from Homestead vendor data: do not hand-edit.
-    Source: Homestead v2.10.1
+    Source: Homestead v2.11.0
 ]]
 
 local _, ns = ...
@@ -579,7 +579,7 @@ ns.Vendors = {
         faction = "Alliance",
         items = {
             { id = 248333, price = 800000 },
-            { id = 248336, price = 2400000 },
+            { id = 248336, price = 800000 },
             { id = 248617, price = 1200000 },
             { id = 248618, price = 1600000 },
             { id = 248619, price = 2000000 },
@@ -812,14 +812,14 @@ ns.Vendors = {
         subzone = "Town Hall",
         faction = "Alliance",
         items = {
-            { id = 245423, currencies = { { id = 824, amount = 250 } } },
-            { id = 251476, currencies = { { id = 824, amount = 1000 } } },
-            { id = 251479, currencies = { { id = 824, amount = 1500 } } },
-            { id = 251481, currencies = { { id = 824, amount = 500 } } },
-            { id = 251483, currencies = { { id = 824, amount = 250 } } },
-            { id = 251484, currencies = { { id = 824, amount = 1000 } } },
-            { id = 251493, currencies = { { id = 824, amount = 500 } } },
-            { id = 251551, currencies = { { id = 824, amount = 1500 } } },
+            { id = 245423, currencies = { { id = 824, amount = 150 } } },
+            { id = 251476, currencies = { { id = 824, amount = 350 } } },
+            { id = 251479, currencies = { { id = 824, amount = 350 } } },
+            { id = 251481, currencies = { { id = 824, amount = 250 } } },
+            { id = 251483, currencies = { { id = 824, amount = 150 } } },
+            { id = 251484, currencies = { { id = 824, amount = 350 } } },
+            { id = 251493, currencies = { { id = 824, amount = 250 } } },
+            { id = 251551, currencies = { { id = 824, amount = 350 } } },
         },
     },
     [85946] = {
@@ -828,9 +828,9 @@ ns.Vendors = {
         subzone = "Town Hall",
         faction = "Alliance",
         items = {
-            { id = 258743, price = 3200000, currencies = { { id = 823, amount = 800 } } },
-            { id = 258746, price = 6000000, currencies = { { id = 823, amount = 1500 } } },
-            { id = 258747, price = 2800000, currencies = { { id = 823, amount = 700 } } },
+            { id = 258743, price = 3200000, currencies = { { id = 823, amount = 350 } } },
+            { id = 258746, price = 6000000, currencies = { { id = 823, amount = 450 } } },
+            { id = 258747, price = 2800000, currencies = { { id = 823, amount = 300 } } },
         },
     },
     [85950] = {
@@ -838,15 +838,15 @@ ns.Vendors = {
         zone = "Stormshield",
         faction = "Alliance",
         items = {
-            { id = 245425, price = 3000000, currencies = { { id = 823, amount = 500 } } },
-            { id = 251330, price = 1000000, currencies = { { id = 823, amount = 300 } } },
-            { id = 251477, price = 5000000, currencies = { { id = 824, amount = 1000 } } },
-            { id = 251478, price = 5000000, currencies = { { id = 823, amount = 1000 } } },
-            { id = 251548, price = 3000000, currencies = { { id = 823, amount = 500 } } },
-            { id = 251549, currencies = { { id = 824, amount = 2000 } } },
-            { id = 251640, price = 5000000, currencies = { { id = 823, amount = 1000 } } },
-            { id = 251653, price = 5000000, currencies = { { id = 824, amount = 1000 } } },
-            { id = 251654, price = 8000000, currencies = { { id = 823, amount = 2000 } } },
+            { id = 245425, price = 3000000, currencies = { { id = 823, amount = 250 } } },
+            { id = 251330, price = 1000000, currencies = { { id = 823, amount = 150 } } },
+            { id = 251477, price = 5000000, currencies = { { id = 824, amount = 400 } } },
+            { id = 251478, price = 5000000, currencies = { { id = 823, amount = 350 } } },
+            { id = 251548, price = 3000000, currencies = { { id = 823, amount = 250 } } },
+            { id = 251549, currencies = { { id = 824, amount = 500 } } },
+            { id = 251640, price = 5000000, currencies = { { id = 823, amount = 350 } } },
+            { id = 251653, price = 5000000, currencies = { { id = 824, amount = 400 } } },
+            { id = 251654, price = 8000000, currencies = { { id = 823, amount = 500 } } },
         },
     },
     [86037] = {
@@ -1616,8 +1616,8 @@ ns.Vendors = {
         zone = "Undermine",
         subzone = "Hovel Hill",
         items = {
-            { id = 245307, currencies = { { id = 2815, amount = 800 } } },
-            { id = 256327, currencies = { { id = 2815, amount = 450 } } },
+            { id = 245307, currencies = { { id = 2815, amount = 350 } } },
+            { id = 256327, currencies = { { id = 2815, amount = 250 } } },
         },
     },
     [231405] = {
@@ -1661,10 +1661,10 @@ ns.Vendors = {
         zone = "Undermine",
         subzone = "Incontinental Hotel",
         items = {
-            { id = 243312, currencies = { { id = 2815, amount = 700 } } },
-            { id = 245314, currencies = { { id = 2815, amount = 650 } } },
-            { id = 245318, currencies = { { id = 2815, amount = 450 } } },
-            { id = 245319, currencies = { { id = 2815, amount = 350 } } },
+            { id = 243312, currencies = { { id = 2815, amount = 350 } } },
+            { id = 245314, currencies = { { id = 2815, amount = 350 } } },
+            { id = 245318, currencies = { { id = 2815, amount = 250 } } },
+            { id = 245319, currencies = { { id = 2815, amount = 200 } } },
         },
     },
     [235252] = {
@@ -1707,7 +1707,7 @@ ns.Vendors = {
         name = "Street Food Vendor",
         zone = "Undermine",
         items = {
-            { id = 256328, currencies = { { id = 2815, amount = 350 } } },
+            { id = 256328, currencies = { { id = 2815, amount = 200 } } },
         },
     },
     [240279] = {
@@ -1816,7 +1816,7 @@ ns.Vendors = {
             { id = 263994, currencies = { { id = 3316, amount = 500 } } },
             { id = 263995, currencies = { { id = 3316, amount = 500 } } },
             { id = 263996, currencies = { { id = 3316, amount = 500 } } },
-            { id = 264007, currencies = { { id = 3316, amount = 250 } } },
+            { id = 264007, currencies = { { id = 3316, amount = 500 } } },
             { id = 264008, currencies = { { id = 3316, amount = 500 } } },
             { id = 264170, currencies = { { id = 3316, amount = 500 } } },
             { id = 264175, currencies = { { id = 3316, amount = 500 } } },
@@ -1964,18 +1964,18 @@ ns.Vendors = {
         zone = "Undermine",
         subzone = "Incontinental Hotel",
         items = {
-            { id = 243312, currencies = { { id = 2815, amount = 700 } } },
-            { id = 243321, currencies = { { id = 2815, amount = 800 } } },
-            { id = 245303, currencies = { { id = 2815, amount = 800 } } },
-            { id = 245306, currencies = { { id = 2815, amount = 900 } } },
-            { id = 245308, currencies = { { id = 2815, amount = 750 } } },
-            { id = 245310, currencies = { { id = 2815, amount = 800 } } },
-            { id = 245314, currencies = { { id = 2815, amount = 650 } } },
-            { id = 245318, currencies = { { id = 2815, amount = 450 } } },
-            { id = 245319, currencies = { { id = 2815, amount = 350 } } },
-            { id = 245324, currencies = { { id = 2815, amount = 1500 } } },
-            { id = 245325, currencies = { { id = 2815, amount = 1000 } } },
-            { id = 260700, currencies = { { id = 2815, amount = 300 } } },
+            { id = 243312, currencies = { { id = 2815, amount = 350 } } },
+            { id = 243321, currencies = { { id = 2815, amount = 350 } } },
+            { id = 245303, currencies = { { id = 2815, amount = 350 } } },
+            { id = 245306, currencies = { { id = 2815, amount = 350 } } },
+            { id = 245308, currencies = { { id = 2815, amount = 350 } } },
+            { id = 245310, currencies = { { id = 2815, amount = 350 } } },
+            { id = 245314, currencies = { { id = 2815, amount = 350 } } },
+            { id = 245318, currencies = { { id = 2815, amount = 250 } } },
+            { id = 245319, currencies = { { id = 2815, amount = 200 } } },
+            { id = 245324, currencies = { { id = 2815, amount = 450 } } },
+            { id = 245325, currencies = { { id = 2815, amount = 400 } } },
+            { id = 260700, currencies = { { id = 2815, amount = 150 } } },
             { id = 267265, currencies = { { id = 2815, amount = 15000 } } },
         },
     },
@@ -2134,6 +2134,9 @@ ns.Vendors = {
             { id = 253598, currencies = { { id = 3316, amount = 500 } } },
             { id = 253700, currencies = { { id = 3316, amount = 250 } } },
             { id = 269316, price = 100000 },
+            { id = 278038, currencies = { { id = 3316, amount = 150 } } },
+            { id = 278044, currencies = { { id = 3316, amount = 150 } } },
+            { id = 278694, currencies = { { id = 3316, amount = 250 } } },
         },
     },
     [252887] = {
@@ -3486,6 +3489,9 @@ ns.Vendors = {
             { id = 259069, price = 2500000 },
             { id = 259070, price = 2500000 },
             { id = 260785, price = 15000000 },
+            { id = 274731, price = 50000000 },
+            { id = 274734, price = 50000000 },
+            { id = 274736, price = 50000000 },
         },
     },
     [256946] = {
@@ -3944,6 +3950,9 @@ ns.Vendors = {
             { id = 281573, currencies = { { id = 3448, amount = 500 } } },
             { id = 281577, currencies = { { id = 3448, amount = 500 } } },
             { id = 281620, currencies = { { id = 3448, amount = 1500 } } },
+            { id = 253455, currencies = { { id = 3448, amount = 500 } } },
+            { id = 253473, currencies = { { id = 3448, amount = 750 } } },
+            { id = 280764, currencies = { { id = 3448, amount = 750 } } },
         },
     },
 }

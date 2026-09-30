@@ -14,6 +14,14 @@ ships an EMPTY changelog to CurseForge/Wago/GitHub on a green CI run.
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-09-29
+
+### Fixed
+
+- Clicking a zone or continent map pin on the world map during combat no
+  longer causes a lua error. Now, in combat clicking will show "You can't do
+  that while in combat" error message. Out of combat function is unchanged.
+
 ## [1.1.2] - 2026-09-27
 
 ### Changed

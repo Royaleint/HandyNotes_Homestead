@@ -452,6 +452,20 @@ function HNH:ShowSummaryTooltip(frame, node)
     GameTooltip:Show()
 end
 
+-- A map change started from addon code in combat makes Blizzard's pin
+-- acquisition run tainted and hit protected calls, so refuse it there.
+local function OpenSummaryMap(node)
+    if InCombatLockdown() then
+        if UIErrorsFrame then
+            UIErrorsFrame:AddMessage(ERR_NOT_IN_COMBAT or "You can't do that while in combat.", 1.0, 0.1, 0.1)
+        end
+        return
+    end
+    if WorldMapFrame and WorldMapFrame.SetMapID then
+        WorldMapFrame:SetMapID(node.mapID or node.zoneMapID)
+    end
+end
+
 local function RenderSummaryPins()
     ClearSummaryPins()
     if not WorldMapFrame or not WorldMapFrame.IsShown or not WorldMapFrame:IsShown() then return end
@@ -491,9 +505,7 @@ local function RenderSummaryPins()
         frame:SetScript("OnEnter", function(self) HNH:ShowSummaryTooltip(self, node) end)
         frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
         frame:SetScript("OnMouseUp", function(_, button)
-            if button == "LeftButton" and WorldMapFrame.SetMapID then
-                WorldMapFrame:SetMapID(node.mapID or node.zoneMapID)
-            end
+            if button == "LeftButton" then OpenSummaryMap(node) end
         end)
         activeSummaryPins[#activeSummaryPins + 1] = frame
         PositionSummaryPin(frame, x, y)
@@ -1209,10 +1221,7 @@ function HNH:OnClick(button, down, uiMapID, coord)
     local node = NodeAt(uiMapID, coord, UnitFactionGroup("player"))
     -- luacheck: ignore 113
     if type(node) == "table" and (node.kind == "zoneSummary" or node.kind == "continentSummary") then
-        -- luacheck: ignore 113
-        if WorldMapFrame and WorldMapFrame.SetMapID then
-            WorldMapFrame:SetMapID(node.mapID or node.zoneMapID)
-        end
+        OpenSummaryMap(node)
         return
     end
     -- Same guard + construction as Homestead's Utils/waypoints.lua: some

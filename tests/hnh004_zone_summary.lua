@@ -119,7 +119,8 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         "Enum", "next", "pairs", "C_Map", "C_Texture", "C_AddOns", "UnitFactionGroup", "CreateFrame",
         "GameTooltip", "UIParent", "WorldMapFrame", "UiMapPoint", "C_SuperTrack", "C_CurrencyInfo",
         "C_Item", "Item", "C_Timer", "HandyNotes", "LibStub", "GetProfessions", "GetProfessionInfo",
-        "hooksecurefunc", "C_AreaPoiInfo",
+        "hooksecurefunc", "C_AreaPoiInfo", "CreateFromMixins", "MapCanvasDataProviderMixin",
+        "InCombatLockdown", "UIErrorsFrame", "ERR_NOT_IN_COMBAT",
     }
     local originalGlobals = {}
     for index = 1, #globalNames do
@@ -354,6 +355,38 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
             end
         end
     end
+    if poiMocks and poiMocks.summaryBadges then
+        -- HNH-029: lets RegisterSummaryMapProvider and RenderSummaryPins build
+        -- real badge frames; the provider is handed back on poiMocks.provider.
+        local baseCreateFrame = _G.CreateFrame
+        _G.CreateFrame = function(...)
+            local badge = baseCreateFrame(...)
+            function badge:SetFrameLevel() end
+            function badge:SetScale() end
+            function badge:CreateTexture()
+                return { SetPoint = function() end, SetSize = function() end, SetTexture = function() end, SetTexCoord = function() end }
+            end
+            local baseFontString = badge.CreateFontString
+            function badge:CreateFontString(...)
+                local line = baseFontString(self, ...)
+                line.GetFont = function() return "font" end
+                line.SetFont = function() end
+                line.SetTextColor = function() end
+                line.SetShadowColor = function() end
+                line.SetShadowOffset = function() end
+                return line
+            end
+            return badge
+        end
+        local canvas = { GetWidth = function() return 1000 end, GetHeight = function() return 1000 end, GetEffectiveScale = function() return 1 end }
+        _G.CreateFromMixins = function() return {} end
+        _G.MapCanvasDataProviderMixin = {}
+        _G.UIParent.GetEffectiveScale = function() return 1 end
+        _G.WorldMapFrame.IsShown = function() return true end
+        _G.WorldMapFrame.GetCanvas = function() return canvas end
+        _G.WorldMapFrame.AddDataProvider = function(_, provider) poiMocks.provider = provider end
+    end
+    _G.InCombatLockdown = function() return false end
     _G.UiMapPoint = { CreateFromCoordinates = function(_, x, y) return { x = x, y = y } end }
     _G.C_SuperTrack = { SetSuperTrackedUserWaypoint = function() waypoint.superTrack = waypoint.superTrack + 1 end }
     _G.C_CurrencyInfo = {
@@ -652,6 +685,64 @@ local function runWorldProjectionRegression()
     check(tooltip.lines[1] == "Fixture continent" and tooltip.lines[2] == "2 vendors" and tooltip.lines[3] == "Click to view continent", "world continent summary tooltip must identify the continent and aggregate count")
     handler.OnClick(pin, "LeftButton", false, 800, 20003000)
     check(selectedMap() == 900, "world continent summary click must open the continent map")
+end
+
+-- HNH-029: an addon-initiated map change in combat taints Blizzard's pin
+-- acquisition, so both summary click paths must refuse it and say why.
+local function runSummaryCombatGuard()
+    local data = {
+        Nodes = { [101] = { [10001000] = 1 } },
+        Vendors = { [1] = { name = "Combat guard vendor", items = {} } },
+    }
+    local fixture = {
+        [800] = { mapID = 800, mapType = 1, name = "Fixture world" },
+        [900] = { mapID = 900, mapType = 2, parentMapID = 800, name = "Fixture continent" },
+        [101] = { mapID = 101, mapType = 3, parentMapID = 900, name = "Guard zone" },
+    }
+    local function adjacentRectangles(sourceMapID, targetMapID)
+        if sourceMapID == 900 and targetMapID == 800 then return 0.1, 0.3, 0.2, 0.4 end
+        return nil
+    end
+    local poiMocks = { mapID = 800, width = 1000, height = 1000, summaryBadges = true }
+    local r = { loadRuntime({}, "Alliance", nil, data, fixture, adjacentRectangles, nil, nil, nil, nil, nil, {}, poiMocks) }
+    local handler, selectedMap, createdFrames = r[1], r[4], r[14]
+    check(poiMocks.provider, "summary map provider must register for the badge path")
+    poiMocks.provider:OnMapChanged()
+    local badge
+    for _, created in ipairs(createdFrames) do
+        if created.scripts.OnMouseUp then badge = created end
+    end
+    check(badge, "world map must render a summary badge with an OnMouseUp handler")
+
+    local inCombat = true
+    local messages = {}
+    _G.InCombatLockdown = function() return inCombat end
+    _G.ERR_NOT_IN_COMBAT = "Combat error text"
+    _G.UIErrorsFrame = { AddMessage = function(_, text, red, green, blue) messages[#messages + 1] = { text = text, red = red, green = green, blue = blue } end }
+
+    badge.scripts.OnMouseUp(badge, "LeftButton")
+    check(selectedMap() == nil, "badge click in combat must not change the map")
+    check(#messages == 1 and messages[1].text == "Combat error text" and messages[1].red == 1.0 and messages[1].green == 0.1 and messages[1].blue == 0.1, "badge click in combat must show the red combat error")
+    handler:OnClick("LeftButton", false, 800, 20003000)
+    check(selectedMap() == nil, "summary OnClick in combat must not change the map")
+    check(#messages == 2 and messages[2].text == "Combat error text", "summary OnClick in combat must show the combat error")
+    check(r[3].set == 0, "summary OnClick in combat must return before the waypoint code")
+
+    _G.ERR_NOT_IN_COMBAT = nil
+    handler:OnClick("LeftButton", false, 800, 20003000)
+    check(messages[3] and messages[3].text == "You can't do that while in combat.", "missing ERR_NOT_IN_COMBAT must fall back to plain English")
+    _G.UIErrorsFrame = nil
+    badge.scripts.OnMouseUp(badge, "LeftButton")
+    check(selectedMap() == nil, "combat guard must still hold without UIErrorsFrame")
+
+    inCombat = false
+    badge.scripts.OnMouseUp(badge, "RightButton")
+    check(selectedMap() == nil, "badge non-left click must not change the map")
+    badge.scripts.OnMouseUp(badge, "LeftButton")
+    check(selectedMap() == 900, "badge click out of combat must open the continent map")
+    handler:OnClick("LeftButton", false, 800, 20003000)
+    check(selectedMap() == 900 and #messages == 3, "summary OnClick out of combat must open the map without an error")
+    r[8]()
 end
 
 local function runHomesteadGeographyRegression()
@@ -1947,6 +2038,7 @@ local function run()
     runHBDProjectionFallback()
     runWorldProjectionRegression()
     runHomesteadGeographyRegression()
+    runSummaryCombatGuard()
     runVendorTooltipSearch()
     runVendorCostRender()
     runVendorCostRenderColdToWarm()

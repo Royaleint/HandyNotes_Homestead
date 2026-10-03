@@ -715,12 +715,21 @@ local function ItemMatchesTooltipSearch(item, itemName)
     return false
 end
 
+-- vendor -> uiMapID of the pin being hovered; re-renders only receive the vendor.
+local vendorMapIDs = {}
+
+local function ClientName(s)
+    if type(s) == "string" and s ~= "" then return s end
+end
+
 local function AddVendorHeader(tooltip, vendor)
     tooltip:SetText(vendor.name)
-    local location = vendor.subzone or vendor.zone
-    if vendor.subzone and vendor.zone then
-        location = vendor.subzone .. ", " .. vendor.zone
-    end
+    local mapID = vendorMapIDs[vendor]
+    local mapInfo = mapID and C_Map.GetMapInfo(mapID)
+    local zone = ClientName(mapInfo and mapInfo.name) or vendor.zone
+    -- GetAreaInfo can return nil or "" despite its documentation; keep ClientName.
+    local subzone = vendor.areaID and C_Map.GetAreaInfo and ClientName(C_Map.GetAreaInfo(vendor.areaID)) or vendor.subzone
+    local location = (subzone and zone) and (subzone .. ", " .. zone) or subzone or zone
     if location then
         tooltip:AddLine(location, 0.7, 0.7, 0.7)
     end
@@ -1086,6 +1095,7 @@ function HNH:OnEnter(uiMapID, coord)
 
     local vendor = ns.Vendors[node]
     if not vendor or not HNH:IsProfessionVendorVisible(node) then return end
+    vendorMapIDs[vendor] = uiMapID
 
     if #vendor.items > LONG_WARES_THRESHOLD then
         if plainTooltip then plainTooltip:Hide() end

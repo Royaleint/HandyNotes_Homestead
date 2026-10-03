@@ -1411,6 +1411,86 @@ local function runVendorCostRenderInteractiveRemeasure()
     restore()
 end
 
+-- The location line prefers the client's area and map names and falls back to the shipped English text.
+local function runVendorLocationLine()
+    local function wares(count)
+        local items = {}
+        for itemID = 1, count do items[#items + 1] = { id = itemID, price = 1 } end
+        return items
+    end
+    local data = {
+        Nodes = { [101] = { [10001000] = 1, [20002000] = 2, [30003000] = 3, [40004000] = 4 } },
+        Vendors = {
+            [1] = { name = "Vendor P", zone = "Old Zone", subzone = "Old Inn", areaID = 501, items = wares(2) },
+            [2] = { name = "Vendor Q", zone = "Old Zone", subzone = "Old Inn", areaID = 501, items = wares(16) },
+            [3] = { name = "Vendor R", zone = "Old Zone", subzone = "Old Inn", items = wares(2) },
+            [4] = { name = "Vendor S", zone = "Old Zone", items = wares(2) },
+        },
+    }
+    local handler, _, _, _, _, _, _, restore, _, _, _, _, _, createdFrames =
+        loadRuntime({}, "Alliance", nil, data)
+    local areaNames = { [501] = "Neue Taverne" }
+    local areaCalls = 0
+    _G.C_Map.GetAreaInfo = function(areaID)
+        areaCalls = areaCalls + 1
+        return areaNames[areaID]
+    end
+    local mapInfo = _G.C_Map.GetMapInfo
+    local pin = _G.CreateFrame("Button")
+
+    handler.OnEnter(pin, 101, 10001000)
+    local plain = findCreatedFrame(createdFrames, "HandyNotesHomesteadTooltip")
+    check(plain, "a short vendor must use the plain tooltip")
+    check(plain.lines[2] == "Neue Taverne, Alpha",
+        "plain tooltip must show the client area and map names, got " .. tostring(plain.lines[2]))
+
+    handler.OnEnter(pin, 101, 20002000)
+    local interactive = findCreatedFrame(createdFrames, "HandyNotesHomesteadWaresTooltip")
+    check(interactive and interactive.lines[2] == "Neue Taverne, Alpha",
+        "interactive tooltip must show the client area and map names, got " .. tostring(interactive and interactive.lines[2]))
+
+    for _, missing in ipairs({ false, "" }) do
+        areaNames[501] = missing or nil
+        handler.OnEnter(pin, 101, 10001000)
+        check(plain.lines[2] == "Old Inn, Alpha",
+            "an empty area name must fall back to the English subzone, got " .. tostring(plain.lines[2]))
+    end
+    areaNames[501] = "Neue Taverne"
+
+    local alpha = mapInfo(101)
+    for _, missing in ipairs({ false, "" }) do
+        _G.C_Map.GetMapInfo = function(mapID)
+            if mapID == 101 then return { mapID = 101, name = missing or nil } end
+            return mapInfo(mapID)
+        end
+        handler.OnEnter(pin, 101, 10001000)
+        check(plain.lines[2] == "Neue Taverne, Old Zone",
+            "an empty map name must fall back to the English zone, got " .. tostring(plain.lines[2]))
+    end
+    _G.C_Map.GetMapInfo = mapInfo
+    check(mapInfo(101) == alpha, "map fixture must be restored")
+
+    areaCalls = 0
+    handler.OnEnter(pin, 101, 30003000)
+    check(areaCalls == 0 and plain.lines[2] == "Old Inn, Alpha",
+        "a vendor without an areaID must not query area names, got " .. areaCalls .. " calls and " .. tostring(plain.lines[2]))
+
+    handler.OnEnter(pin, 101, 40004000)
+    check(plain.lines[2] == "Alpha", "a vendor without a subzone must show the map name, got " .. tostring(plain.lines[2]))
+
+    handler.OnEnter(pin, 101, 20002000)
+    interactive.scripts.OnMouseWheel(interactive, -1)
+    check(interactive.scrollOffset == 1 and interactive.lines[2] == "Neue Taverne, Alpha",
+        "the location line must survive a scroll re-render, got " .. tostring(interactive.lines[2]))
+
+    _G.C_Map.GetAreaInfo = nil
+    handler.OnEnter(pin, 101, 20002000)
+    check(interactive.lines[2] == "Old Inn, Alpha",
+        "a client without the area API must fall back to the English subzone, got " .. tostring(interactive.lines[2]))
+
+    restore()
+end
+
 -- Vendor pins are raised to the Quest Ping frame-level band so they always draw over Blizzard's area and event POI pins.
 -- Named-field wrapper over loadRuntime's positional returns; hand-counted destructuring silently grabs the wrong slot.
 local function loadPinRuntime(pins)
@@ -2103,6 +2183,7 @@ local function run()
     runVendorCostRender()
     runVendorCostRenderColdToWarm()
     runVendorCostRenderInteractiveRemeasure()
+    runVendorLocationLine()
     runVendorPinLayering()
     runPoiNudge()
     runPinSeparation()

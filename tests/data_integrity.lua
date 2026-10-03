@@ -44,7 +44,7 @@ end
 local ns = {}
 assert(loadfile(dataPath))("HandyNotes_Homestead", ns)
 
-local VENDOR_FIELDS = { name = true, zone = true, subzone = true, faction = true, items = true }
+local VENDOR_FIELDS = { name = true, zone = true, subzone = true, areaID = true, faction = true, items = true }
 local ITEM_FIELDS = { id = true, price = true, currencies = true, items = true, otherCost = true }
 local COST_ENTRY_FIELDS = { id = true, amount = true }
 
@@ -146,6 +146,17 @@ else
             end
             if vendor.subzone ~= nil and type(vendor.subzone) ~= "string" then
                 fail("%s: subzone is present but not a string", vendorLabel)
+            end
+            if vendor.zone == nil or vendor.zone == "" then
+                fail("%s: zone is not a non-empty string", vendorLabel)
+            end
+            if vendor.areaID ~= nil then
+                if not isPositiveInt(vendor.areaID) then
+                    fail("%s: areaID is not a positive integer", vendorLabel)
+                end
+                if vendor.subzone == nil then
+                    fail("%s: areaID without subzone", vendorLabel)
+                end
             end
             if vendor.faction ~= nil and vendor.faction ~= "Alliance" and vendor.faction ~= "Horde" then
                 fail("%s: faction is %s, expected Alliance or Horde", vendorLabel, tostring(vendor.faction))

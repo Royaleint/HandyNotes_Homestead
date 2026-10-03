@@ -59,9 +59,6 @@ end
 
 -- HandyNotes draws pins at 12px x scale (screen-anchored via SetScalingLimits),
 -- so these multiply that base: ~16px on the world map, slightly enlarged on the minimap.
-
-
-
 local WORLD_PIN_SCALE = 1.35
 local MINIMAP_PIN_SCALE = 1.15
 
@@ -69,8 +66,8 @@ local MINIMAP_PIN_SCALE = 1.15
 -- Continent-level nodes
 --
 -- The generated data keys nodes by each vendor's own zone map, so continent
--- maps have nothing to draw (in-game finding, 2026-08-12). Build one summary
--- per zone at its rectangle center when the continent is first viewed.
+-- maps have nothing to draw. Build one summary per zone at its rectangle center
+-- when the continent is first viewed.
 -------------------------------------------------------------------------------
 
 local HBD
@@ -123,6 +120,7 @@ function HNH:IsProfessionVendorVisible(npcID)
 end
 
 local function RefreshProfessionVisibilityCache()
+    -- Cache key tracks only Herbalism (182); extend it if professionVendorRequirements gains another skill line.
     local nextKey = PlayerHasSkillLine(182) and "herbalism" or "no_herbalism"
     if nextKey == professionVisibilityKey then return end
     professionVisibilityKey = nextKey
@@ -204,6 +202,7 @@ local function ProjectZoneCenterToMap(zoneMapID, continentMapID)
 end
 
 local function PackSummaryCoordinate(x, y)
+    -- HandyNotes coords pack as XXXXYYYY (see getXY); x or y of 1.0 would overflow into the next field.
     if x < 0 or x >= 1 or y < 0 or y >= 1 then return nil end
     local packedX = math.floor(x * 10000 + 0.5)
     local packedY = math.floor(y * 10000 + 0.5)
@@ -240,6 +239,7 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
 
     nodes = {}
     cachedNodes[factionKey] = nodes
+    -- Diagnostic record read by tests/; not a dead store.
     ns.ZoneSummaryProjectionFailures = ns.ZoneSummaryProjectionFailures or {}
     local viewFailures = ns.ZoneSummaryProjectionFailures[viewMapID]
     if not viewFailures then
@@ -263,6 +263,7 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
             zoneMapIDs[#zoneMapIDs + 1] = zoneMapID
         end
     end
+    -- Sorted so collision nudging places summaries the same way every session.
     table.sort(zoneMapIDs)
 
     if isWorld then
@@ -410,6 +411,7 @@ function HNH:GetSummaryVisualSizes(uiScale)
 end
 
 function HNH:GetSummaryFrameLayering()
+    -- Deliberately raised above the map's own pins; lowering this hides the badges under them.
     return "MEDIUM", 2024
 end
 
@@ -434,6 +436,7 @@ local function PositionSummaryPin(frame, x, y)
     if not width or not height or width <= 0 or height <= 0 then return false end
     local canvasScale = canvas:GetEffectiveScale() or 1
     local uiScale = UIParent:GetEffectiveScale() or 1
+    -- Counter the canvas zoom so pins stay a constant screen size; SetPoint offsets are then in the pin's scaled units, hence the / scale.
     local scale = canvasScale > 0 and uiScale / canvasScale or 1
     frame:SetScale(scale)
     frame:ClearAllPoints()
@@ -553,7 +556,6 @@ do
             end
             local vendor = ns.Vendors[node]
             -- vendor.faction is set only for Alliance- or Horde-only vendors; nil means show to all.
-
             if vendor and HNH:IsProfessionVendorVisible(node) and (not vendor.faction or vendor.faction == playerFaction) then
                 return coord, nil, iconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
             end
@@ -568,6 +570,7 @@ do
         local nodes = ns.Nodes[uiMapID]
         if not minimap then
             local info = C_Map.GetMapInfo(uiMapID)
+            -- The world map draws continent/world summaries through our own data provider; returning nodes here would draw them twice.
             if info and info.mapType == Enum.UIMapType.Continent then
                 if WorldMapFrame and WorldMapFrame.GetCanvas then return iter, nil, nil end
                 nodes = GetProjectedNodes(uiMapID, playerFaction, false)
@@ -595,38 +598,13 @@ local tooltipSearchQuery = ""
 local suppressTooltipSearchChanged = false
 local mapHideHookInstalled = false
 
--- Formats an item's cost for display: gold via GetCoinTextureString (coin
--- icons built in), currencies via a live GetCurrencyInfo icon lookup with a
--- name fallback, and item-based reagent costs via GetItemIconByID with a
--- GetItemNameByID fallback. Mirrors Homestead's own VendorData:FormatCost,
--- which resolves all three live at render time rather than baking a
--- name/icon into the export at build time. No API-existence guard: the .toc
--- is retail-only and every call here exists on every flavor — unlike
--- Homestead's version, which has a real hand-rolled fallback if the guard
--- ever trips, this one would just go silent, so an unreachable guard here is
--- worse than no guard.
---
--- The "(other cost)" marker covers namedCosts rows (none live today — see
--- item.otherCost below) and the degraded lookup paths: a currency or reagent
--- item whose icon and name both fail to resolve. GetCurrencyInfo and
--- GetItemIconByID/GetItemNameByID are client-side static data and routinely
--- return nil for an item or currency the player has never held — this is
--- the ordinary case for a reagent used as a price, not a rare edge case:
--- Blizzard's own cost-item code (e.g. Blizzard_ItemUpgradeUI.lua) treats it
--- as expected and re-resolves lazily rather than caching a degraded result.
---
--- Returns (cost, complete). `complete` is false whenever any lookup in this
--- call (currency or reagent item) came back with neither icon nor name — a
--- degraded result is NEVER written to item.costCache, so the next render
--- recomputes it from scratch, and RefreshVendorItems below requests the
--- missing item data so that next render actually happens once it lands.
--- A fully resolved string IS memoized on the item table (`complete == true`)
--- because the underlying cost DATA never changes once loaded, and
--- recomputing GetCurrencyInfo/GetItemIconByID on every re-render would
--- amplify an existing O(n^2) hover cost on a large vendor. `item.costCache
--- == false` means "computed, no cost data" (a genuinely free item); nil
--- means "not computed yet".
--- Grey (matches the location/"Wares unknown" convention below, 0.7,0.7,0.7).
+-- Returns (cost, complete) for an item: gold, currency icons, and reagent item icons,
+-- with names as the fallback.
+-- Currency and item lookups routinely return nil until the client has the data. Such a
+-- result is marked incomplete and never cached, so a later render can fill it in.
+-- Resolved strings are cached because the tooltip re-renders on every item load; uncached, large vendors go quadratic.
+-- item.costCache: nil = not computed yet, false = free, string = resolved cost.
+-- Grey, matching the location and "Wares unknown" lines.
 local OTHER_COST_TEXT = "|cFFB3B3B3(other cost)|r"
 
 local function FormatCost(item)
@@ -636,17 +614,9 @@ local function FormatCost(item)
     end
 
     local parts = {}
-    -- Set by a degraded currency/item lookup below; combined with
-    -- item.otherCost after the loops rather than appended immediately, so
-    -- the marker always lands last regardless of which entry (if any)
-    -- failed to resolve — otherwise a first-currency failure with a later
-    -- successful one would render "(other cost) + 50 <icon>", marker before
-    -- the amount.
+    -- Appended after the loops so the marker always lands last, even when an early lookup fails.
     local needsOtherCost = false
-    -- True only when a currency/item lookup came back degraded (see the
-    -- header comment) — distinct from needsOtherCost, which also covers the
-    -- permanent namedCosts marker below. A degraded result must never be
-    -- cached; a namedCosts marker is permanent and safe to cache.
+    -- Separate from needsOtherCost: an otherCost marker is safe to cache, a degraded lookup never is.
     local degraded = false
 
     if item.price and item.price > 0 then
@@ -660,11 +630,7 @@ local function FormatCost(item)
             elseif info and info.name then
                 parts[#parts + 1] = currency.amount .. " " .. info.name
             else
-                -- Currency lookup returned neither icon nor name — the
-                -- ordinary state for an uncached currency, not a rare edge
-                -- case. Never print the raw currency ID to a player — fall
-                -- back to the same honest "can't show this" marker the
-                -- out-of-scope-cost path uses, and do not cache this result.
+                -- Not loaded yet (normal, not rare): never show the raw ID; mark it and skip caching.
                 needsOtherCost = true
                 degraded = true
             end
@@ -680,13 +646,7 @@ local function FormatCost(item)
                 if name then
                     parts[#parts + 1] = itemCost.amount .. " " .. name
                 else
-                    -- Item lookup returned neither icon nor name — the
-                    -- ordinary state for a reagent the player has never
-                    -- held, not a rare edge case (see header comment).
-                    -- Never print the raw item ID to a player — fall back
-                    -- to the same honest "can't show this" marker the
-                    -- out-of-scope-cost path uses, and do not cache this
-                    -- result.
+                    -- Not loaded yet (normal for unseen reagents): never show the raw ID; mark it and skip caching.
                     needsOtherCost = true
                     degraded = true
                 end
@@ -694,14 +654,6 @@ local function FormatCost(item)
         end
     end
     -- Keep: an otherCost row's listed price is only part of its cost; without the marker the tooltip understates it.
-
-
-
-
-
-
-
-
     if item.otherCost then
         needsOtherCost = true
     end
@@ -711,12 +663,7 @@ local function FormatCost(item)
 
     local cost = (#parts > 0) and table.concat(parts, " + ") or nil
     if degraded then
-        -- Do not memoize: this render's cost may be missing a currency or
-        -- reagent name/icon that simply hasn't loaded yet. Returning
-        -- complete == false tells the caller to keep this hover "pending"
-        -- so RefreshVendorItems requests the missing item data and the next
-        -- render (triggered by that load) recomputes instead of reusing a
-        -- frozen degraded string.
+        -- Don't memoize: complete == false keeps the hover pending so it re-renders once the data loads.
         return cost, false
     end
     item.costCache = (cost == nil) and false or cost
@@ -802,13 +749,9 @@ local function RenderPlainTooltip(tooltip, vendor)
     return pending
 end
 
--- The interactive tooltip IS a GameTooltip (same template, same AddLine /
--- AddDoubleLine rendering as the plain path) so the two look identical; the
--- only additions are a MinimalScrollBar down the right edge and a search box
--- along the bottom, both sitting in padding the tooltip reserves for them.
+-- A GameTooltip, like the plain path, plus a scroll bar and search box in reserved padding.
 -- GameTooltip_OnHide clears that padding, so it is re-applied on every render.
--- MinimalScrollBar is an 8px track but its stepper arrows are 17px wide,
--- centred on it; the column must fit the arrows, not the track.
+-- MinimalScrollBar's arrows are 17px wide, centred on an 8px track; size the column for the arrows.
 local INTERACTIVE_RIGHT_PADDING = 24
 local INTERACTIVE_BAR_INSET = 10
 local INTERACTIVE_BOTTOM_PADDING = 26
@@ -828,6 +771,7 @@ local function SyncScrollBar(frame)
         return
     end
     bar:Show()
+    -- Suppresses the bar's own OnScroll callback while we set its position.
     syncingScrollBar = true
     bar:SetVisibleExtentPercentage(MAX_VISIBLE_WARE_ROWS / frame.matchCount)
     bar:SetPanExtentPercentage(1 / maximum)
@@ -875,9 +819,7 @@ local function RenderInteractiveTooltip(vendor)
     for _, item in ipairs(vendor.items) do
         local itemName = C_Item.GetItemInfo(item.id)
         if itemName then resolved = resolved + 1 else pending = true end
-        -- A reagent icon/name resolving after the width was measured must
-        -- also trigger a re-measure, so resolved counts resolved ware names
-        -- PLUS complete costs, not just names.
+        -- Count complete costs too: a reagent resolving late must also trigger a re-measure.
         local _, costComplete = FormatCost(item)
         if costComplete then resolved = resolved + 1 else pending = true end
         if ItemMatchesTooltipSearch(item, itemName) then
@@ -889,15 +831,9 @@ local function RenderInteractiveTooltip(vendor)
     local scrollable = matches > MAX_VISIBLE_WARE_ROWS
     local rightPadding = scrollable and INTERACTIVE_RIGHT_PADDING or 0
 
-    -- The window of 15 names changes width as it scrolls, and a tooltip that
-    -- resizes under the cursor is hard to scroll and can slide out from under
-    -- it (which closes it). So the width is measured from a full render of
-    -- EVERY ware (query ignored, so a search typed mid-load cannot freeze a
-    -- narrow width) and frozen for the vendor. It is re-measured only when
-    -- another name has resolved since the last measure — "..." is narrower
-    -- than the real name — so an item that never loads cannot keep the
-    -- measure running, and a zero width (rect not yet valid) is not recorded,
-    -- so the next render measures again instead of freezing the floor.
+    -- Width is measured once per vendor from every ware (query ignored) and frozen, so
+    -- scrolling or searching never resizes the tooltip under the cursor and closes it.
+    -- Re-measure only when another name resolves; never freeze a zero width.
     if frame.measuredVendor ~= vendor or frame.measuredResolved ~= resolved then
         if AddInteractiveLines(frame, vendor, 1, math.huge, true) then pending = true end
         -- Reset the minimum before measuring or the previous vendor's width
@@ -920,11 +856,8 @@ local function RenderInteractiveTooltip(vendor)
     frame:SetMinimumWidth(frame.measuredWidth)
     frame:SetPadding(rightPadding, INTERACTIVE_BOTTOM_PADDING)
     frame:Show()
-    -- Anchor once per hover, and only from a usable height: a zero height
-    -- (rect not valid yet) would read as "room below" for every pin and hand
-    -- the low-pin clamping bug back, so the pin is held until a later render.
-    -- Never re-anchor on later renders — a narrowing search shortens the
-    -- tooltip and a flip would jump it out from under the cursor.
+    -- Anchor once per hover, and only once the height is non-zero (zero misreads as room
+    -- below). Never re-anchor: a narrowing search would flip the tooltip out from under the cursor.
     if frame.anchorPin and frame:GetHeight() > 0 then
         AnchorInteractiveTooltip(frame, frame.anchorPin)
         frame.anchorPin = nil
@@ -933,16 +866,9 @@ local function RenderInteractiveTooltip(vendor)
     return pending
 end
 
--- Butts the tooltip edge-to-edge against the pin so the cursor can cross
--- onto it (a corner touch closes on the crossing check). The tooltip is
--- ~300px tall, so for a pin low on the map hanging down from the pin's top
--- would overhang the screen and SetClampedToScreen would slide it up off
--- the pin; in that case it rises from the pin's bottom instead. Decided
--- after the first render, when the tooltip's height is known. The vertical
--- test is in screen pixels because the pin lives on the scaled map canvas
--- (HandyNotes pins scale 1.0-1.2x with zoom); the left/right flip compares
--- raw centres, which only shifts the flip point a little right of centre
--- where either side has room.
+-- Butts the tooltip edge-to-edge against the pin (a corner touch closes on the
+-- crossing). Hangs down unless that would overhang the screen, where clamping would
+-- slide it off the pin. The vertical test uses effective scale: pins sit on the scaled map canvas.
 AnchorInteractiveTooltip = function(frame, pin)
     local flip = pin:GetCenter() > UIParent:GetCenter()
     local hangsDown = true
@@ -1005,6 +931,7 @@ local function EnsureInteractiveTooltip()
     bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -INTERACTIVE_BAR_INSET, INTERACTIVE_BOTTOM_PADDING + 4)
     bar:Init(1, 1)
     bar:RegisterCallback(BaseScrollBoxEvents.OnScroll, function(_, percentage)
+        -- SyncScrollBar's SetScrollPercentage re-fires OnScroll; ignore it so rounding can't feed back into the offset.
         if syncingScrollBar then return end
         SetInteractiveScrollOffset(math.floor(percentage * ScrollMaximum(frame) + 0.5))
     end, frame)
@@ -1059,6 +986,7 @@ local function EnsureInteractiveTooltip()
         SetInteractiveScrollOffset((frame.scrollOffset or 0) - delta)
     end)
     frame:SetScript("OnKeyDown", function(self, key)
+        -- EnableKeyboard swallows every key; pass all but Escape through or movement and keybinds die.
         self:SetPropagateKeyboardInput(key ~= "ESCAPE")
         if key == "ESCAPE" then
             currentHover = nil
@@ -1071,11 +999,6 @@ local function EnsureInteractiveTooltip()
 end
 
 -- Coalesce item-load callbacks in the same frame: a large vendor can complete many loads at once, and repainting per item makes hover O(n^2).
-
-
-
-
-
 local function QueueTooltipRefresh(token, render)
     if token.refreshQueued then return end
     token.refreshQueued = true
@@ -1085,9 +1008,7 @@ local function QueueTooltipRefresh(token, render)
     end)
 end
 
--- Shared by the ware-name request below and the reagent-cost request: asks
--- the client to load one item's data and queues a re-render of the still-
--- active hover when it lands. Two call sites, one callback shape.
+-- Loads one item's data and queues a re-render only if the same hover is still active.
 local function RequestItemLoad(itemID, token, render)
     Item:CreateFromItemID(itemID):ContinueOnItemLoad(function()
         if currentHover == token then QueueTooltipRefresh(token, render) end
@@ -1224,8 +1145,7 @@ function HNH:OnClick(button, down, uiMapID, coord)
         OpenSummaryMap(node)
         return
     end
-    -- Same guard + construction as Homestead's Utils/waypoints.lua: some
-    -- maps reject user waypoints.
+    -- Some maps reject user waypoints.
     if C_Map.CanSetUserWaypointOnMap and not C_Map.CanSetUserWaypointOnMap(uiMapID) then
         return
     end
@@ -1292,45 +1212,21 @@ local options = {
 -- pin, the ping halo, takes no mouse input).
 -- The template is shared by every plugin, so only this addon's own pins are re-typed
 -- after HandyNotes places them.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 -------------------------------------------------------------------------------
 
 local VENDOR_PIN_FRAME_LEVEL_TYPE = "PIN_FRAME_LEVEL_QUEST_PING"
 
--- The frame level is a plain frame property that nothing clears on its own
--- (HandyNotes releases a pin back to its pool without resetting it, and
--- reacquiring it for reuse doesn't re-set it either -- see the reset branch
--- below), so one UseFrameLevelType + ApplyFrameLevel call after HandyNotes
--- (re)acquires a pin persists for that pin's life in the pool. This does not
--- need to run per-frame or on zoom/reposition -- only after HandyNotes
--- places or reassigns pins (see the RefreshPlugin hook below).
+-- The frame level survives pool reuse, so this only needs to run after RefreshPlugin, not per frame.
 local function RaiseVendorPins()
     if not WorldMapFrame or not WorldMapFrame.EnumeratePinsByTemplate then return end
     for pin in WorldMapFrame:EnumeratePinsByTemplate("HandyNotesWorldMapPinTemplate") do
         if pin.pluginName == PLUGIN_NAME and pin.UseFrameLevelType then
+            -- UseFrameLevelType only records the band; ApplyFrameLevel is what moves the pin.
             pin:UseFrameLevelType(VENDOR_PIN_FRAME_LEVEL_TYPE)
             pin:ApplyFrameLevel()
             pin._hnhRaised = true
         elseif pin._hnhRaised then
-            -- HandyNotes pools pins across plugins, and its template only
-            -- sets PIN_FRAME_LEVEL_AREA_POI once, in OnLoad (at pool
-            -- creation) -- a pin we raised and HandyNotes later reassigned
-            -- to a DIFFERENT plugin would otherwise keep our frame level
-            -- forever. Restore HandyNotes' own default explicitly.
+            -- Pooled pins are shared across plugins and OnLoad sets the band only once, so undo our raise.
             pin:UseFrameLevelType("PIN_FRAME_LEVEL_AREA_POI")
             pin:ApplyFrameLevel()
             pin._hnhRaised = nil
@@ -1347,17 +1243,7 @@ end
 
 local VENDOR_PIN_SIZE_BONUS = 1 -- extra pixels added to HandyNotes' own pin size
 
--- Runs only on HNH's OWN RefreshPlugin call (see the pluginName guard in
--- InstallVendorPinLayering's hook below). No reset step needed on pool
--- reuse: HandyNotesWorldMapPinMixin:OnAcquired sets
--- `local size = 12 * db.icon_scale * scale; self:SetSize(size, size)` on
--- EVERY acquire (HandyNotes.lua:381-382), and RefreshPlugin removes and
--- reacquires every one of a plugin's pins on every call for that plugin --
--- so by the time this runs, GetSize() always reads HandyNotes' own fresh
--- default, never a size we already grew. Reading it and adding
--- VENDOR_PIN_SIZE_BONUS once is therefore safe with nothing to undo first,
--- and safe to run exactly once per our own refresh (this pass only ever
--- runs once per RefreshPlugin call for HNH).
+-- OnAcquired resets the size on every acquire, so this is safe only on HNH's own refresh.
 local function GrowVendorPinSize()
     if not WorldMapFrame or not WorldMapFrame.EnumeratePinsByTemplate then return end
     for pin in WorldMapFrame:EnumeratePinsByTemplate("HandyNotesWorldMapPinTemplate") do
@@ -1371,45 +1257,17 @@ end
 -------------------------------------------------------------------------------
 -- POI-proximity nudge
 --
--- Shifts a vendor pin 2px away from any Blizzard point-of-interest pin it
--- lands on top of, so the POI underneath isn't fully hidden. Frame-level
--- layering (above) decides who draws on top when two pins occupy the same
--- spot; this decides whether they occupy the same spot at all.
---
--- POI positions come from the C_AreaPoiInfo data APIs, not from Blizzard's
--- own rendered POI pins -- map data providers dispatch in no defined order,
--- so Blizzard's POI provider may not have placed its pins yet when
--- HandyNotes' RefreshPlugin runs. Only regular area POIs and world events
--- are checked; dungeon entrances, flight points, and delve entrances are
--- left out -- each of those needs its own availability/CVar guard for a
--- collision this plugin hasn't been reported to hit. Unlike Homestead's own
--- dodge, this deliberately does NOT skip world/continent maps -- a
--- zone-summary or continent-summary pin gets the dodge and the separation
--- pass below, the same as an ordinary vendor pin.
---
--- The POI list is read once per HNH refresh, not kept live -- a POI that
--- appears, moves, or despawns while the map stays open isn't picked up
--- until the next refresh. Cosmetic: the frame-level raise above still keeps
--- the pin clickable either way.
+-- Shifts a vendor pin 2px off a nearby area POI or world event so the marker stays visible.
+-- Other POI kinds (flight points, dungeon/delve entrances) each need their own availability/CVar check; left out on purpose.
+-- POI positions come from C_AreaPoiInfo, not Blizzard's pins: provider order is undefined.
+-- Runs on world and continent maps too, so summary pins get the dodge.
 -------------------------------------------------------------------------------
 
--- Both these and PIN_SEPARATION_MIN_PIXELS below are CONTAINER pixels (the
--- fixed-size map viewport), not screen pixels -- normalized coordinates are
--- scaled by zoom before they reach the screen, so the on-screen distance
--- these numbers produce is exact only at full zoom-out and roughly 2-3x
--- larger at max zoom. The container's own size doesn't change with zoom, so
--- a given threshold/offset is at least stable across refreshes at any one
--- zoom level -- it just isn't the same NUMBER of screen pixels at every one.
+-- Container pixels, not screen pixels: the on-screen distance grows with zoom.
 local POI_NUDGE_THRESHOLD_PIXELS = 18
 local POI_NUDGE_DISTANCE_PIXELS = 2
 
--- Guards against a NaN coordinate a broken API call could hand back. NaN
--- only matters here because NaN comparisons are always false: `not
--- closestDist` still lets a NaN candidate win the FIRST comparison (there's
--- nothing to compare it against yet), and it then survives the threshold
--- check below too, since `NaN > POI_NUDGE_THRESHOLD_PIXELS` is also false.
--- `n == n` is false only for NaN, so this rejects the coordinate outright
--- before any of that can happen.
+-- n == n rejects NaN, which would otherwise win the closest-POI check and pass the threshold.
 local function IsFiniteNumber(n)
     return type(n) == "number" and n == n
 end
@@ -1424,10 +1282,7 @@ local function GetPoiPositionsForMap(mapID)
     local positions = {}
     if not C_AreaPoiInfo then return positions end
 
-    -- Regular area POIs (quest hubs, portals, etc.) and world events
-    -- (Saltheril's Soiree, Abundance, etc.) use separate list APIs. Both
-    -- list calls are pcall-guarded: an absent or throwing list API degrades
-    -- to zero candidates from that source instead of aborting the nudge pass.
+    -- Area POIs and world events use separate list APIs; pcall so a missing one yields no candidates.
     local okPoi, poiIDs = pcall(C_AreaPoiInfo.GetAreaPOIForMap, mapID)
     if okPoi and poiIDs then
         for _, poiID in ipairs(poiIDs) do
@@ -1487,34 +1342,14 @@ end
 -------------------------------------------------------------------------------
 -- Pin self-avoidance
 --
--- Separate from the POI dodge above: two of HNH's OWN vendor pins can also
--- end up within a few pixels of each other. This pushes any pair closer than
--- 4px apart away from each other, up to PIN_SEPARATION_MAX_PASSES times or
--- until a pass moves nothing -- not guaranteed to land every pair at exactly
--- 4px on a dense cluster, see SeparateOwnPins' own comment below --
--- independent of whether either one is also dodging a POI.
+-- Pushes HNH's own vendor pins apart when two land within a few pixels of each other.
 -------------------------------------------------------------------------------
 
 local PIN_SEPARATION_MIN_PIXELS = 4 -- container pixels -- see the note above POI_NUDGE_THRESHOLD_PIXELS
 local PIN_SEPARATION_MAX_PASSES = 3
 
--- Pushes any two of HNH's own pins closer than PIN_SEPARATION_MIN_PIXELS
--- apart so they end up exactly that far apart, each moving half the
--- deficit. Works in place on the xs/ys/moved scratch arrays -- no table
--- allocated here, only scalar reads and writes. Runs up to
--- PIN_SEPARATION_MAX_PASSES times or until a full pass moves nothing: one
--- pass only resolves each pair once, and resolving one pair can push a pin
--- into a THIRD pin's range, so a stack of 3+ needs more than one pass to
--- fully spread out.
---
--- The dist == 0 (exactly coincident) branch is defensive, not a case HNH's
--- own data can produce: a map's node table is keyed by coordinate, and
--- HandyNotes:getXY is injective, so two of our pins can never legitimately
--- share a position. It's kept because dividing by a zero distance would
--- otherwise produce a NaN offset (a real, observed failure if this branch is
--- removed) -- with no real coincidence to break a tie for, the two pins in
--- the pair just get a fixed, opposite push (first pin right, second pin
--- left) rather than a real direction computed from anything.
+-- Moves each pin of a too-close pair half the deficit. Multiple passes: fixing one pair
+-- can push a pin into a third pin's range.
 local function SeparateOwnPins(xs, ys, moved, count, width, height)
     for _ = 1, PIN_SEPARATION_MAX_PASSES do
         local movedAny = false
@@ -1525,9 +1360,10 @@ local function SeparateOwnPins(xs, ys, moved, count, width, height)
                 local dist = math.sqrt(dx * dx + dy * dy)
                 if dist < PIN_SEPARATION_MIN_PIXELS then
                     local dirIX, dirIY, dirJX, dirJY
+                    -- Not reachable from our data, but keep it: dividing by a zero dist turns both positions into NaN, which the clamp does not catch.
                     if dist == 0 then
-                        dirIX, dirIY = 1, 0 -- first pin of the pair -- push right
-                        dirJX, dirJY = -1, 0 -- second pin -- push left
+                        dirIX, dirIY = 1, 0
+                        dirJX, dirJY = -1, 0
                     else
                         dirIX, dirIY = dx / dist, dy / dist
                         dirJX, dirJY = -dirIX, -dirIY
@@ -1547,10 +1383,7 @@ local function SeparateOwnPins(xs, ys, moved, count, width, height)
     end
 end
 
--- Reusable scratch arrays for ApplyPinPlacementAdjustments below -- module
--- locals so nothing per-pin gets allocated on a call that runs on every HNH
--- refresh. Parallel arrays (indexed 1..pinScratchCount), not an array of
--- per-pin tables.
+-- Parallel scratch arrays, reused so a refresh allocates nothing per pin.
 local pinScratchPins = {}
 local pinScratchX = {}
 local pinScratchY = {}
@@ -1558,30 +1391,9 @@ local pinScratchInset = {}
 local pinScratchMoved = {}
 local pinScratchCount = 0
 
--- Runs once per HNH's OWN RefreshPlugin call (see the pluginName guard in
--- InstallVendorPinLayering's hook below) -- never on another plugin's
--- refresh. HandyNotes removes and re-acquires every one of a plugin's pins
--- on each RefreshPlugin call for that plugin (WorldMapDataProvider:
--- RefreshPlugin in HandyNotes.lua), and a freshly acquired pin's OnAcquired
--- sets its position straight from the original, un-adjusted data coordinate.
--- So GetPosition() below always reads the original coordinate fresh, even on
--- a plugin's second or third refresh -- adjusting it again lands on the same
--- spot instead of drifting further away each time.
---
--- Two adjustments run in sequence, both in the same container-pixel space:
--- each pin dodges the nearest Blizzard POI first, then HNH's own pins are
--- pushed apart from each other. Both read and write the SAME in-memory
--- position for a pin (the scratch arrays below), so a POI dodge that moves a
--- pin toward a sibling is already accounted for by the time the separation
--- pass runs -- and the separation pass never re-triggers the POI check. That
--- also means the separation pass CAN move a pin back within POI range (a 2px
--- dodge followed by a 4px separation can net out closer to the POI than the
--- dodge alone would have left it) -- accepted, not re-checked, since chasing
--- that would mean re-running both passes until neither moves anything.
---
--- Pins are enumerated before the POI list is even fetched, so a map with
--- none of our pins on it (most maps, most of the time) never pays for the
--- POI query at all.
+-- Pins are re-acquired at their data coordinate on each HNH refresh, so this never drifts;
+-- run it on any other plugin's refresh and pins move further every time.
+-- Separation can move a pin back into POI range; accepted.
 local function ApplyPinPlacementAdjustments()
     if not WorldMapFrame or not WorldMapFrame.GetMapID or not WorldMapFrame.GetCanvasContainer
             or not WorldMapFrame.EnumeratePinsByTemplate then
@@ -1613,7 +1425,7 @@ local function ApplyPinPlacementAdjustments()
         end
     end
 
-    if pinScratchCount == 0 then return end
+    if pinScratchCount == 0 then return end -- before the POI query: most maps have none of our pins
 
     local poiPositions = GetPoiPositionsForMap(mapID)
     if #poiPositions > 0 then
@@ -1641,26 +1453,11 @@ local vendorPinLayeringInstalled = false
 local function InstallVendorPinLayering()
     if vendorPinLayeringInstalled or not HandyNotes.WorldMapDataProvider or not hooksecurefunc then return end
     vendorPinLayeringInstalled = true
-    -- Runs on EVERY plugin's RefreshPlugin, not only ours. RaiseVendorPins'
-    -- own pluginName check already restricts which pins get RAISED to HNH's
-    -- own, but the RESET branch must run whenever a pin we raised could have
-    -- been reassigned to a DIFFERENT plugin by HandyNotes' pool -- and that
-    -- can happen on any plugin's own refresh (its pin count growing pulls a
-    -- released, still-raised pin of ours out of the pool), not only ours.
+    -- Hook every plugin's refresh: any plugin can pull a pin we raised out of the shared pool.
     hooksecurefunc(HandyNotes.WorldMapDataProvider, "RefreshPlugin", function(_, pluginName)
         RaiseVendorPins()
-        -- The placement adjustments and the size bonus, unlike the reset
-        -- branch above, only ever need to run on HNH's OWN refresh -- our
-        -- pins aren't re-acquired on someone else's refresh, so running them
-        -- then would push an already-adjusted pin further away every time
-        -- (adjustments) or grow an already-grown pin again (size), drifting
-        -- or repeating work with every unrelated map refresh instead of
-        -- settling once per HNH refresh.
-        --
-        -- Order between the two doesn't matter: adjustments only ever reads
-        -- or writes a pin's POSITION (GetPosition/SetPosition), size only
-        -- ever reads or writes its SIZE (GetSize/SetSize) -- neither pass
-        -- touches the property the other one owns.
+        -- Own refresh only: our pins are re-acquired just then, so running these on another
+        -- plugin's refresh would move and grow already-adjusted pins again.
         if pluginName == PLUGIN_NAME then
             ApplyPinPlacementAdjustments()
             GrowVendorPinSize()

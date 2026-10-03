@@ -4,9 +4,8 @@
 # lints the code or runs the data/behavior tests on the plugin side. This
 # gate catches a hand-edited, malformed, or unstamped Data.lua, or a Lua
 # error introduced anywhere else in the addon, before it ships. It cannot
-# catch a Data.lua that is well-formed but stale against Homestead's own
-# source data — that is the fidelity checker's job, and it needs the
-# private repo this CI does not have.
+# catch a Data.lua that is well-formed but stale against the Homestead
+# addon's vendor data; that comparison needs data this repo does not carry.
 name: Tests
 
 on:

@@ -8,16 +8,12 @@ externals:
   Libs/AceDB-3.0: https://repos.wowace.com/wow/ace3/trunk/AceDB-3.0
   Libs/AceEvent-3.0: https://repos.wowace.com/wow/ace3/trunk/AceEvent-3.0
 
-# CF-only upload metadata: sent as a CurseForge relation when a CF project id
-# is active (same pattern as Homestead's .pkgmeta — a page listing, not a
-# packaging instruction).
+# CurseForge relation metadata only (a project-page listing, not a packaging instruction).
 required-dependencies:
   - handynotes
 
-# RELEASE_NOTES.html is generated at CI time (extracted from CHANGELOG.md and
-# converted from markdown to HTML by the release workflow). CF's API claims to
-# accept changelogType: markdown but renders it as plain text; HTML is the only
-# format that renders correctly on both CurseForge and Wago.
+# Built by the release workflow from CHANGELOG.md. HTML because CurseForge renders
+# markdown as plain text; HTML renders on both CurseForge and Wago.
 manual-changelog:
   filename: RELEASE_NOTES.html
   markup-type: html

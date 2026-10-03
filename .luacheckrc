@@ -20,7 +20,7 @@ globals = {
 -- with the code, don't pre-seed it.
 read_globals = {
     -- Lua builtins
-    "next", "ipairs", "math", "table", "type", "tostring", "pcall",
+    "next", "ipairs", "math", "table", "type", "tostring", "pcall", "string",
 
     -- Libraries
     "LibStub",
@@ -55,4 +55,10 @@ read_globals = {
     "ScrollBoxConstants",
     "SearchBoxTemplate_OnTextChanged",
     "SearchBoxTemplate_OnEditFocusLost",
+}
+
+-- Locale files read the client's own strings at load; no other file may.
+files["Locale/"] = { read_globals = { "GetLocale" } }
+files["Locale/enUS.lua"] = {
+    read_globals = { "SEARCH", "QUEST_LOG_NO_RESULTS", "ITEMS", "HEADER_COLON", "UNKNOWN", "OPACITY" },
 }

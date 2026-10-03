@@ -464,6 +464,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         return { Embed = function(_, target) target.SendMessage = function() end end }
     end
 
+    assert(loadfile("Locale/enUS.lua"))("HandyNotes_Homestead", data)
     assert(loadfile("HandyNotes_Homestead.lua"))("HandyNotes_Homestead", data)
     if frame then frame.scripts.OnEvent(frame) end
     return registered, tooltip, waypoint, function() return mapSelection end, function(value) factionState.value = value end,
@@ -667,7 +668,7 @@ local function runWorldProjectionRegression()
     check(worldSummary.mapID == 900 and worldSummary.vendorCount == 2, "world continent summary must identify the continent and aggregate its visible vendors")
     local pin = { GetCenter = function() return 0 end }
     handler.OnEnter(pin, 800, 20003000)
-    check(tooltip.lines[1] == "Fixture continent" and tooltip.lines[2] == "2 vendors" and tooltip.lines[3] == "Click to view continent", "world continent summary tooltip must identify the continent and aggregate count")
+    check(tooltip.lines[1] == "Fixture continent" and tooltip.lines[2] == "Vendors: 2" and tooltip.lines[3] == "Click to view continent", "world continent summary tooltip must identify the continent and aggregate count")
     handler.OnClick(pin, "LeftButton", false, 800, 20003000)
     check(selectedMap() == 900, "world continent summary click must open the continent map")
 end
@@ -864,7 +865,7 @@ local function runVendorTooltipSearch()
         "plain tooltip must be tooltip-strata, clamped, and owned by its pin")
     check(#shortEditBoxes == 0 and not findCreatedFrame(shortFrames, "HandyNotesHomesteadWaresTooltip"),
         "plain path must not create the interactive frame or search box")
-    check(not string.find(table.concat(plainTooltip.lines, "\n"), "Search wares...", 1, true),
+    check(not string.find(table.concat(plainTooltip.lines, "\n"), "Search", 1, true),
         "plain tooltip must not render search controls")
     check(sharedTooltip.hookInstallations == 0 and shortHookCount() == 2,
         "plain path must install exactly its pin-hide and map-hide teardown hooks, and none on the shared GameTooltip")
@@ -944,10 +945,10 @@ local function runVendorTooltipSearch()
         "search input must stay at the bottom of the interactive frame")
     check(string.find(visibleFrameText(interactive), "Search vendor", 1, true),
         "interactive tooltip must render its vendor header")
-    check(searchBox.template == "SearchBoxTemplate" and searchBox.Instructions.text == "Search wares...",
+    check(searchBox.template == "SearchBoxTemplate" and searchBox.Instructions.text == "Search",
         "search box must be Blizzard's SearchBoxTemplate with HNH's placeholder")
-    check(string.find(visibleFrameText(interactive), "Wares:", 1, true),
-        "interactive tooltip must render the same Wares: header as the plain tooltip")
+    check(string.find(visibleFrameText(interactive), "Items:", 1, true),
+        "interactive tooltip must render the same Items: header as the plain tooltip")
     check(pin.scripts.OnHide, "interactive tooltip must close when its pin hides")
     interactive.scripts.OnMouseWheel(interactive, -1)
     check(interactive.scrollOffset == 1 and string.find(visibleFrameText(interactive), "Ware 16", 1, true),
@@ -1068,7 +1069,7 @@ local function runVendorTooltipSearch()
 
     searchBox:SetText("missing")
     timers[5].callback()
-    check(string.find(visibleFrameText(interactive), "No matching wares", 1, true),
+    check(string.find(visibleFrameText(interactive), "No results found", 1, true),
         "no-match query must report the empty result")
     check(not scrollBar.shown and interactive.padding.right == 0,
         "a list that fits must hide the scroll bar and drop its padding")
@@ -1122,7 +1123,7 @@ local function runVendorTooltipSearch()
     local clears = interactive.clearCalls
     searchBox:SetText("nothing-matches")
     timers[#timers].callback()
-    check(string.find(visibleFrameText(interactive), "No matching wares", 1, true)
+    check(string.find(visibleFrameText(interactive), "No results found", 1, true)
         and interactive.minimumWidth == 333 and interactive.clearCalls == clears + 1,
         "a search must neither re-measure nor narrow the frozen width")
     interactive.width = 0
@@ -1924,7 +1925,7 @@ local function run()
     local pin = { GetCenter = function() return 0 end }
     handler.OnEnter(pin, 101, 10001000)
     local plainTooltip = findCreatedFrame(createdFrames, "HandyNotesHomesteadTooltip")
-    check(plainTooltip and plainTooltip.lines[1] == "Alliance vendor" and plainTooltip.lines[4] == "Wares:" and plainTooltip.lines[5] == "Cached item",
+    check(plainTooltip and plainTooltip.lines[1] == "Alliance vendor" and plainTooltip.lines[4] == "Items:" and plainTooltip.lines[5] == "Cached item",
         "numeric vendor OnEnter must retain its dedicated plain wares tooltip path")
 
     local summaries = collect(handler, 900, false)
@@ -1973,9 +1974,9 @@ local function run()
 
     setFaction("Alliance")
     handler.OnEnter(pin, 900, 15009999)
-    check(#tooltip.lines == 3 and tooltip.lines[1] == "Alpha" and tooltip.lines[2] == "2 vendors", "summary tooltip must contain only the zone and vendor count")
+    check(#tooltip.lines == 3 and tooltip.lines[1] == "Alpha" and tooltip.lines[2] == "Vendors: 2", "summary tooltip must contain only the zone and vendor count")
     check(type(tooltip.lines[3]) == "string" and string.find(string.lower(tooltip.lines[3]), "click"), "summary tooltip must include a click instruction")
-    check(not string.find(table.concat(tooltip.lines, "\n"), "Alliance vendor") and not string.find(table.concat(tooltip.lines, "\n"), "Wares") and not string.find(table.concat(tooltip.lines, "\n"), "Cached item"), "summary tooltip must not render vendor wares or item lines")
+    check(not string.find(table.concat(tooltip.lines, "\n"), "Alliance vendor") and not string.find(table.concat(tooltip.lines, "\n"), "Items", 1, true) and not string.find(table.concat(tooltip.lines, "\n"), "Cached item"), "summary tooltip must not render vendor wares or item lines")
     check(tooltip.owner == pin, "summary hover must own the shared tooltip")
     handler.OnLeave(pin, 900, 15009999)
     check(tooltip.owner == nil, "leaving a summary badge must hide the shared tooltip")

@@ -12,5 +12,6 @@
 
 embeds.xml
 
+Locale\enUS.lua
 Data.lua
 HandyNotes_Homestead.lua

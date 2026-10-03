@@ -8,6 +8,7 @@
 ]]
 
 local _, ns = ...
+local L = ns.L
 
 local HNH = {}
 local db
@@ -449,9 +450,9 @@ function HNH:ShowSummaryTooltip(frame, node)
     local mapID = node.mapID or node.zoneMapID
     local mapInfo = C_Map.GetMapInfo(mapID)
     GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
-    GameTooltip:SetText(mapInfo and mapInfo.name or "Unknown map")
-    GameTooltip:AddLine(tostring(node.vendorCount) .. " vendors")
-    GameTooltip:AddLine("Click to view " .. (node.kind == "continentSummary" and "continent" or "zone"))
+    GameTooltip:SetText(mapInfo and mapInfo.name or L["Unknown"])
+    GameTooltip:AddLine(string.format(L["Vendors: %d"], node.vendorCount))
+    GameTooltip:AddLine(node.kind == "continentSummary" and L["Click to view continent"] or L["Click to view zone"])
     GameTooltip:Show()
 end
 
@@ -550,7 +551,6 @@ do
         if not nodes then return nil end
         local coord, node = next(nodes, prestate)
         while coord do
-            -- luacheck: ignore 113
             if type(node) == "table" and (node.kind == "zoneSummary" or node.kind == "continentSummary") then
                 return coord, nil, summaryIconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
             end
@@ -604,8 +604,8 @@ local mapHideHookInstalled = false
 -- result is marked incomplete and never cached, so a later render can fill it in.
 -- Resolved strings are cached because the tooltip re-renders on every item load; uncached, large vendors go quadratic.
 -- item.costCache: nil = not computed yet, false = free, string = resolved cost.
--- Grey, matching the location and "Wares unknown" lines.
-local OTHER_COST_TEXT = "|cFFB3B3B3(other cost)|r"
+-- Grey, matching the location and "Items unknown" lines.
+local OTHER_COST_TEXT = "|cFFB3B3B3" .. L["(other cost)"] .. "|r"
 
 local function FormatCost(item)
     if item.costCache ~= nil then
@@ -723,7 +723,7 @@ local function RenderPlainTooltip(tooltip, vendor)
     local pending = false
     if #vendor.items > 0 then
         tooltip:AddLine(" ")
-        tooltip:AddLine("Wares:", 1, 0.82, 0)
+        tooltip:AddLine(L["Items"] .. L[":"], 1, 0.82, 0)
         local matches = 0
         for _, item in ipairs(vendor.items) do
             local itemName = C_Item.GetItemInfo(item.id)
@@ -739,10 +739,10 @@ local function RenderPlainTooltip(tooltip, vendor)
                 end
             end
         end
-        if matches == 0 then tooltip:AddLine("No matching wares", 0.7, 0.7, 0.7) end
+        if matches == 0 then tooltip:AddLine(L["No results found"], 0.7, 0.7, 0.7) end
     else
         tooltip:AddLine(" ")
-        tooltip:AddLine("Wares unknown", 0.7, 0.7, 0.7)
+        tooltip:AddLine(L["Items unknown"], 0.7, 0.7, 0.7)
     end
 
     tooltip:Show()
@@ -787,7 +787,7 @@ local function AddInteractiveLines(frame, vendor, first, limit, everyWare)
     frame:ClearLines()
     AddVendorHeader(frame, vendor)
     frame:AddLine(" ")
-    frame:AddLine("Wares:", 1, 0.82, 0)
+    frame:AddLine(L["Items"] .. L[":"], 1, 0.82, 0)
     local matchIndex = 0
     local shown = 0
     local pending = false
@@ -807,7 +807,7 @@ local function AddInteractiveLines(frame, vendor, first, limit, everyWare)
             end
         end
     end
-    if matchIndex == 0 then frame:AddLine("No matching wares", 0.7, 0.7, 0.7) end
+    if matchIndex == 0 then frame:AddLine(L["No results found"], 0.7, 0.7, 0.7) end
     return pending
 end
 
@@ -943,14 +943,13 @@ local function EnsureInteractiveTooltip()
     tooltipSearchBox:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 6)
     tooltipSearchBox:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -12, 6)
     tooltipSearchBox:SetHeight(20)
-    tooltipSearchBox.Instructions:SetText("Search wares...")
+    tooltipSearchBox.Instructions:SetText(L["Search"])
     tooltipSearchBox:SetScript("OnTextChanged", function(self)
         SearchBoxTemplate_OnTextChanged(self)
         if suppressTooltipSearchChanged then return end
         if tooltipSearchTimer then tooltipSearchTimer:Cancel() end
         local token = currentHover
         if not token then return end
-        -- luacheck: ignore 113
         tooltipSearchTimer = C_Timer.NewTimer(0.3, function()
             tooltipSearchTimer = nil
             if currentHover ~= token or not interactiveTooltip:IsShown() then return end
@@ -1051,19 +1050,18 @@ function HNH:OnEnter(uiMapID, coord)
     local node = NodeAt(uiMapID, coord, UnitFactionGroup("player"))
     if not node then return end
 
-    -- luacheck: ignore 113
     if type(node) == "table" and (node.kind == "zoneSummary" or node.kind == "continentSummary") then
         currentHover = nil
         CloseInteractiveTooltip()
         if plainTooltip then plainTooltip:Hide() end
         local summaryMapID = node.mapID or node.zoneMapID
         local summaryMap = C_Map.GetMapInfo(summaryMapID)
-        local summaryLabel = node.kind == "continentSummary" and "continent" or "zone"
+        local isContinent = node.kind == "continentSummary"
         local tooltip = GameTooltip
         tooltip:SetOwner(self, self:GetCenter() > UIParent:GetCenter() and "ANCHOR_LEFT" or "ANCHOR_RIGHT")
-        tooltip:SetText(summaryMap and summaryMap.name or ("Unknown " .. summaryLabel))
-        tooltip:AddLine(node.vendorCount .. " vendors")
-        tooltip:AddLine("Click to view " .. summaryLabel)
+        tooltip:SetText(summaryMap and summaryMap.name or L["Unknown"])
+        tooltip:AddLine(string.format(L["Vendors: %d"], node.vendorCount))
+        tooltip:AddLine(isContinent and L["Click to view continent"] or L["Click to view zone"])
         tooltip:Show()
         return
     end
@@ -1121,7 +1119,6 @@ function HNH:OnLeave()
         CloseAllVendorTooltips()
         return
     end
-    -- luacheck: ignore 113
     C_Timer.After(0, function()
         if currentHover ~= token then return end
         -- A search that narrows the list shrinks the tooltip, which can move
@@ -1140,7 +1137,6 @@ end
 function HNH:OnClick(button, down, uiMapID, coord)
     if button ~= "LeftButton" or down then return end
     local node = NodeAt(uiMapID, coord, UnitFactionGroup("player"))
-    -- luacheck: ignore 113
     if type(node) == "table" and (node.kind == "zoneSummary" or node.kind == "continentSummary") then
         OpenSummaryMap(node)
         return
@@ -1168,7 +1164,7 @@ end
 local options = {
     type = "group",
     name = "Homestead",
-    desc = "Housing decor vendor locations",
+    desc = L["Housing decor vendor locations"],
     get = function(info) return db.profile[info.arg] end,
     set = function(info, value)
         db.profile[info.arg] = value
@@ -1176,22 +1172,22 @@ local options = {
     end,
     args = {
         desc = {
-            name = "Housing decor vendor pins powered by Homestead's vendor data.",
+            name = L["Housing decor vendor pins powered by Homestead's vendor data."],
             type = "description",
             order = 0,
         },
         icon_scale = {
             type = "range",
-            name = "Icon Scale",
-            desc = "Size of the vendor pins.",
+            name = L["Icon Scale"],
+            desc = L["Size of the vendor pins."],
             min = 0.25, max = 2, step = 0.01,
             arg = "icon_scale",
             order = 1,
         },
         icon_alpha = {
             type = "range",
-            name = "Icon Alpha",
-            desc = "Transparency of the vendor pins.",
+            name = L["Opacity"],
+            desc = L["Transparency of the vendor pins."],
             min = 0.1, max = 1, step = 0.01,
             arg = "icon_alpha",
             order = 2,

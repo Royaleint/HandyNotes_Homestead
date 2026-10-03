@@ -116,6 +116,7 @@ local ns = {
     },
 }
 
+assert(loadfile("Locale/enUS.lua"))(nil, ns)
 local addon = assert(loadfile("HandyNotes_Homestead.lua"))
 addon(nil, ns)
 loginHandler(loginFrame)

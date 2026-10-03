@@ -28,7 +28,7 @@ jobs:
         run: luarocks install luacheck
 
       - name: Luacheck
-        run: luacheck HandyNotes_Homestead.lua Data.lua tests --no-color
+        run: luacheck HandyNotes_Homestead.lua Data.lua Locale tests --no-color
 
       - name: Run tests
         run: |

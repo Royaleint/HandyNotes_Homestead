@@ -9,7 +9,7 @@ RELEASE_NOTES.html
 .release/
 
 # Nested private dev repo (tracker, plans) — never packaged or pushed with
-# the public addon (same pattern as Homestead's Home_Dev).
+# the public addon.
 HNH_Dev/
 
 # Local implementation worktrees; keep linked branches out of the public checkout.

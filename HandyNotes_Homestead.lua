@@ -57,11 +57,11 @@ end
 -- HandyNotes plugin handler
 -------------------------------------------------------------------------------
 
--- HandyNotes renders world-map pins at 12px x scale (screen-anchored via
--- SetScalingLimits). Pin-size tuning (2026-08-11/12) walked 12px -> 24 -> 9
--- -> 14; settled on 1.35 (~16px), the de-facto ecosystem standard for
--- vendor nodes (zarillion handynotes-plugins core/nodes.lua Vendor class).
--- Minimap pins at 12px match Homestead's minimap size and stay untouched.
+-- HandyNotes draws pins at 12px x scale (screen-anchored via SetScalingLimits),
+-- so these multiply that base: ~16px on the world map, slightly enlarged on the minimap.
+
+
+
 local WORLD_PIN_SCALE = 1.35
 local MINIMAP_PIN_SCALE = 1.15
 
@@ -552,8 +552,8 @@ do
                 return coord, nil, summaryIconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
             end
             local vendor = ns.Vendors[node]
-            -- faction is pre-baked by the exporter: present only when the
-            -- vendor is effectively Alliance/Horde; absent = show to all.
+            -- vendor.faction is set only for Alliance- or Horde-only vendors; nil means show to all.
+
             if vendor and HNH:IsProfessionVendorVisible(node) and (not vendor.faction or vendor.faction == playerFaction) then
                 return coord, nil, iconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
             end
@@ -693,15 +693,15 @@ local function FormatCost(item)
             end
         end
     end
-    -- LOAD-BEARING, not cosmetic: this is the only thing standing between a
-    -- price-carrying otherCost row (e.g. "800g" on an item that really costs
-    -- 800g + a named favor) and the understated-price defect this feature
-    -- was built to avoid. The exporter guarantees every such row (namedCosts
-    -- today) sets item.otherCost — nothing else in this file re-derives or
-    -- re-checks that. If this branch is ever dropped, short-circuited, or
-    -- refactored away, the understated price comes back silently: tests and
-    -- luacheck both pass, because the export data is correct — only the
-    -- tooltip lies.
+    -- Keep: an otherCost row's listed price is only part of its cost; without the marker the tooltip understates it.
+
+
+
+
+
+
+
+
     if item.otherCost then
         needsOtherCost = true
     end
@@ -1070,12 +1070,12 @@ local function EnsureInteractiveTooltip()
     return frame
 end
 
--- Coalesce item-load callbacks that land in the same frame. A large vendor
--- can have many uncached ware names or reagent costs (RefreshVendorItems
--- below fires one RequestItemLoad per miss), and ContinueOnItemLoad can
--- complete several of them in one batch -- one completed item is enough to
--- repaint the tooltip once for that frame instead of once per item, which is
--- the O(n^2) hover cost HNH-009 exists to bound.
+-- Coalesce item-load callbacks in the same frame: a large vendor can complete many loads at once, and repainting per item makes hover O(n^2).
+
+
+
+
+
 local function QueueTooltipRefresh(token, render)
     if token.refreshQueued then return end
     token.refreshQueued = true
@@ -1282,31 +1282,31 @@ local options = {
 -------------------------------------------------------------------------------
 -- Vendor pin layering
 --
--- HandyNotes' own pin template declares PIN_FRAME_LEVEL_AREA_POI
--- (HandyNotes.lua:363) -- the SAME band Blizzard's own regular area-POI pins
--- use (AreaPOIDataProvider.lua:68). That band has range 1
--- (MapCanvas_PinFrameLevelsManager.lua:146-158), so every pin in it resolves
--- to the identical frame level and sibling draw order alone decides which
--- one ends up on top -- effectively a coin flip on every map refresh.
--- Homestead's own ruling (MapPinProvider.lua:485-496) puts its vendor pins
--- one band above Area POI, at Gossip, deliberately under quests, world
--- quests, vignettes, waypoints and map links. That ruling stands for
--- Homestead. Here it is not enough: Gossip beats Blizzard's REGULAR area
--- POIs but not its EVENT area POIs (PIN_FRAME_LEVEL_AREA_POI_EVENT, ten
--- bands higher at Blizzard_WorldMap.lua:274), and a vendor under an event
--- marker was still unreachable. This addon therefore goes one band above
--- the event band, to Quest Ping (Blizzard_WorldMap.lua:275) -- the lowest
--- band that clears it. The precise result: vendor pins draw over every
--- band registered before :275 -- regular AND event area POIs, map links
--- (the zone-transition marker: a vendor sitting on one blocks its
--- right-click navigation, an accepted trade), encounter, contribution
--- collector, scenario, vignettes, quest offers, bonus objectives and world
--- quests -- and stay UNDER everything registered after it (:276-287):
--- tracked content, active / super-tracked quests, group members,
--- waypoints and the corpse marker. The only other Quest Ping user is the
--- transient ping halo, which has no mouse handling. This addon can't
--- change HandyNotes' shared pin template, so it re-types its OWN pins
+-- HandyNotes' pin template uses PIN_FRAME_LEVEL_AREA_POI, a one-level band shared
+-- with Blizzard's area POIs, so which pin draws on top there is arbitrary. Vendor
+-- pins are re-typed to PIN_FRAME_LEVEL_QUEST_PING, the lowest band above event area
+-- POIs: over POIs, map links, vignettes and world quests; under tracked quests,
+-- group members, waypoints and the corpse marker.
+-- A vendor pin on a map link blocks the link's right-click travel; that cost is
+-- accepted, so don't lower it, and don't raise it either (the only other Quest Ping
+-- pin, the ping halo, takes no mouse input).
+-- The template is shared by every plugin, so only this addon's own pins are re-typed
 -- after HandyNotes places them.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 -------------------------------------------------------------------------------
 
 local VENDOR_PIN_FRAME_LEVEL_TYPE = "PIN_FRAME_LEVEL_QUEST_PING"

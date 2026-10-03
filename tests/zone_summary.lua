@@ -34,21 +34,12 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     local tooltip = { lines = {}, owner = nil, scripts = {}, hookInstallations = 0 }
     local waypoint = { set = 0, clear = 0, superTrack = 0 }
     local mapSelection
-    -- HNH-020 redesign (layer, not dodge): pin-layering test control. `pins`
-    -- (optional) is the caller-owned pin list for WorldMapFrame's
-    -- EnumeratePinsByTemplate mock below -- kept as the SAME table reference
-    -- the caller passed in (not copied), so a test can push/mutate pins into
-    -- it AFTER loadRuntime returns and have the next enumeration see the
-    -- change. Every other test leaves `pins` nil, which is also the gate
-    -- (`pins ~= nil` below) for whether HandyNotes.WorldMapDataProvider and
-    -- hooksecurefunc get mocked at all -- if they were always mocked,
-    -- InstallVendorPinLayering would install its hook on every login and
-    -- inflate the exact hookInstallations counts several pre-existing tests
-    -- assert (e.g. "== 2", "== 6").
+    -- `pins` (optional) is kept by reference so a test can mutate it after loadRuntime returns.
+    -- Left nil, WorldMapDataProvider/hooksecurefunc stay unmocked so the layering hook isn't
+    -- installed and other tests' exact hookInstallations counts hold.
     local pinLayeringEnabled = pins ~= nil
     local pinList = pins or {}
-    -- POI-nudge test control (HNH-020 follow-up). `poiMocks` (optional, only
-    -- meaningful alongside `pins`) is a table of:
+    -- POI-nudge test control. `poiMocks` is optional; its POI fields require `pins`:
     --   mapID            -- returned by WorldMapFrame:GetMapID()
     --   width, height    -- returned by the canvas container's GetWidth/GetHeight
     --   areaPoiIDs       -- list returned by C_AreaPoiInfo.GetAreaPOIForMap
@@ -57,10 +48,10 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     --   areaPoiThrows / eventPoiThrows -- make that list call error()
     --   noApi            -- omit C_AreaPoiInfo entirely (API absent)
     --   noMapID / noContainer -- omit the matching WorldMapFrame method
-    -- Left nil, WorldMapFrame gets no GetMapID/GetCanvasContainer and
-    -- C_AreaPoiInfo is left as whatever it already was (nil in tests) --
-    -- ApplyPoiNudge's own guards then no-op it out, so every pre-existing
-    -- pin-layering test is unaffected by this parameter's addition.
+    --   summaryBadges    -- build real summary badge frames (works without `pins`)
+    --   provider         -- set by the mock to the registered summary map provider
+    -- Left nil, WorldMapFrame gets no GetMapID/GetCanvasContainer and C_AreaPoiInfo is left untouched,
+    -- so ApplyPoiNudge's guards no-op.
     local rectangleCalls = 0
     local rectangleOrder = {}
     local itemCached = true
@@ -356,8 +347,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         end
     end
     if poiMocks and poiMocks.summaryBadges then
-        -- HNH-029: lets RegisterSummaryMapProvider and RenderSummaryPins build
-        -- real badge frames; the provider is handed back on poiMocks.provider.
+        -- Lets RegisterSummaryMapProvider and RenderSummaryPins build real badge frames; the provider is handed back on poiMocks.provider.
         local baseCreateFrame = _G.CreateFrame
         _G.CreateFrame = function(...)
             local badge = baseCreateFrame(...)
@@ -402,13 +392,8 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
             return itemNames and itemNames[itemID] or "Cached item"
         end,
         DoesItemExistByID = function() return true end,
-        -- Gated on the same itemCached flag as GetItemInfo: a real client
-        -- with a cold item cache resolves neither icon nor name for ANY
-        -- item, ware or reagent (HNH-021 round 2, Argus Minor 2). A
-        -- per-item table lookup (itemIcons/itemNames absent for a given id)
-        -- separately models "this specific item hasn't loaded yet" even
-        -- while itemCached is true, which is what the cold-reagent tests
-        -- below use.
+        -- Gated on itemCached like GetItemInfo: a cold client cache resolves neither icon nor name for any item.
+        -- A missing itemIcons/itemNames entry models one item still loading while itemCached is true.
         GetItemIconByID = function(itemID)
             if not itemCached then return nil end
             return itemIcons and itemIcons[itemID]
@@ -687,8 +672,7 @@ local function runWorldProjectionRegression()
     check(selectedMap() == 900, "world continent summary click must open the continent map")
 end
 
--- HNH-029: an addon-initiated map change in combat taints Blizzard's pin
--- acquisition, so both summary click paths must refuse it and say why.
+-- An addon-initiated map change in combat taints Blizzard's pin acquisition, so both summary click paths must refuse it and say why.
 local function runSummaryCombatGuard()
     local data = {
         Nodes = { [101] = { [10001000] = 1 } },
@@ -1182,10 +1166,8 @@ local function runVendorTooltipSearch()
     restore()
 end
 
--- HNH-021: item-based costs (reagent items, e.g. Spare Parts, Polished Pet
--- Charms) render like Homestead itself — a resolved icon, a resolved name
--- fallback, or the honest "(other cost)" marker, never the raw item ID —
--- and match tooltip search by the reagent's name.
+-- Item-based costs (reagents such as Spare Parts, Polished Pet Charms) render like Homestead: a resolved icon,
+-- a resolved name fallback, or "(other cost)", never the raw item ID. Tooltip search also matches the reagent's name.
 
 -- Finds the first frame line whose text starts with `prefix` (exact-match
 -- helper, not a substring find, so a stray appended marker is caught).
@@ -1262,10 +1244,8 @@ local function runVendorCostRender()
     restore()
 end
 
--- HNH-021 round 2 (Argus Critical 1): a reagent cost degraded on first
--- render (no icon, no name) must never freeze — it must request the item's
--- data and self-correct once it resolves, exactly like the ware-name path
--- already does. Plain-tooltip coverage.
+-- A reagent cost degraded on first render (no icon, no name) must not freeze: it requests the item data and
+-- self-corrects once it resolves, like the ware-name path. Plain-tooltip coverage.
 local function runVendorCostRenderColdToWarm()
     local ware = { id = 900, price = 50, items = { { id = 779, amount = 3 } } }
     local itemIcons = {}
@@ -1303,9 +1283,8 @@ local function runVendorCostRenderColdToWarm()
     restore()
 end
 
--- Same scenario on the interactive path: a reagent resolving after the
--- tooltip's width was measured must trigger a re-measure, not leave the
--- frozen (narrower) width in place (Argus Major 1, round 2).
+-- Same scenario on the interactive path: a reagent resolving after the width was measured must trigger a
+-- re-measure, not keep the narrower frozen width.
 local function runVendorCostRenderInteractiveRemeasure()
     local coldWare = { id = 900, price = 50, items = { { id = 779, amount = 3 } } }
     local items = { coldWare }
@@ -1338,13 +1317,8 @@ local function runVendorCostRenderInteractiveRemeasure()
     restore()
 end
 
--- HNH-020 redesign (layer, not dodge): vendor pins raised to the Quest Ping
--- frame-level band so they always draw over Blizzard's area POI pins
--- (regular and event) instead of a coin-flip-by-sibling-order. Named-field wrapper around
--- loadRuntime's positional return list, matching the pattern the dodge
--- prototype used for the same reason: a hand-counted positional
--- destructuring is exactly the kind of thing that silently grabs the wrong
--- value and produces a misleading failure.
+-- Vendor pins are raised to the Quest Ping frame-level band so they always draw over Blizzard's area and event POI pins.
+-- Named-field wrapper over loadRuntime's positional returns; hand-counted destructuring silently grabs the wrong slot.
 local function loadPinRuntime(pins)
     local r = { loadRuntime({}, "Alliance", nil, nil, nil, nil, nil, nil, nil, nil, nil, pins) }
     return {
@@ -1356,9 +1330,7 @@ local function loadPinRuntime(pins)
     }
 end
 
--- HNH-020 follow-up (POI-proximity nudge, later pin self-avoidance): same
--- loadRuntime call as loadPinRuntime, but also threading poiMocks
--- (positional slot 13) through.
+-- Same as loadPinRuntime, also passing poiMocks (positional slot 13).
 local function loadNudgeRuntime(pins, poiMocks)
     local r = { loadRuntime({}, "Alliance", nil, nil, nil, nil, nil, nil, nil, nil, nil, pins, poiMocks) }
     return {
@@ -1427,12 +1399,9 @@ local function runVendorPinLayering()
         rt.restore()
     end
 
-    -- (b) [round 2, Argus Warning 2] the reset branch must run on EVERY
-    -- plugin's RefreshPlugin, not only HNH's own -- a pin we raised, then
-    -- reassigned by HandyNotes to a different plugin, must be reset to
-    -- AREA_POI on THAT plugin's own refresh, without waiting for HNH's next
-    -- one. A pin still owned by HNH stays at Quest Ping (re-raised, since the
-    -- per-pin pluginName check inside RaiseVendorPins runs on every call).
+    -- (b) The reset branch must run on EVERY plugin's RefreshPlugin, not only HNH's own: a pin we raised and
+    -- HandyNotes then reassigned must reset to AREA_POI on that plugin's refresh.
+    -- A pin still owned by HNH stays at Quest Ping (RaiseVendorPins re-checks pluginName every call).
     do
         local pins = {}
         local rt = loadPinRuntime(pins)
@@ -1500,10 +1469,8 @@ local function approxEqual(a, b)
     return math.abs(a - b) < 0.0001
 end
 
--- HNH-020 follow-up: shift a vendor pin 2px directly away from the closest
--- Blizzard POI within 18px, on HNH's own RefreshPlugin only. A 1000x1000
--- mock container makes 0.001 normalized == 1px, so the expected offsets
--- below are easy to hand-check.
+-- Shift a vendor pin 2px directly away from the closest Blizzard POI within 18px, on HNH's own RefreshPlugin only.
+-- A 1000x1000 mock container makes 0.001 normalized == 1px, so expected offsets are easy to hand-check.
 local function runPoiNudge()
     local PLUGIN_NAME = "Homestead"
     local poiAtCenter = { mapID = 101, width = 1000, height = 1000, areaPoiIDs = { 1 }, poiPositions = { [1] = { x = 0.5, y = 0.5 } } }
@@ -1677,9 +1644,8 @@ local function runPoiNudge()
     end
 end
 
--- HNH-020 follow-up (pin self-avoidance): HNH's own pins pushed apart from
--- EACH OTHER, independent of the POI dodge above. Same 1000x1000 mock
--- container as runPoiNudge -- 0.001 normalized == 1px.
+-- Pin self-avoidance: HNH's own pins pushed apart from each other, independent of the POI nudge above.
+-- Same 1000x1000 container (0.001 == 1px).
 local function runPinSeparation()
     local PLUGIN_NAME = "Homestead"
     local noPoi = { mapID = 101, width = 1000, height = 1000 }
@@ -1853,8 +1819,7 @@ local function runPinSeparation()
     end
 end
 
--- HNH-020 follow-up (pin size): our own world-map pins 1px larger than
--- HandyNotes' own default.
+-- Our own world-map pins are 1px larger than HandyNotes' default.
 local function runVendorPinSize()
     local PLUGIN_NAME = "Homestead"
 
@@ -2053,5 +2018,5 @@ local ok, err = xpcall(run, debug.traceback)
 restoreAll()
 if not ok then error(err, 0) end
 
-print("HNH-004 zone summary harness: PASS")
+print("zone summary harness: PASS")
 -- luacheck: pop

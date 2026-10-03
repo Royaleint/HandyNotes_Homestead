@@ -1,16 +1,11 @@
 -- luacheck: push ignore 111 112 113
 
 --[[
-    Schema and provenance check for the committed Data.lua, independent of
-    the generator (Home_Dev/scripts/generate-handynotes-export.mjs). Needs no
-    Homestead sources: it validates the shape, internal consistency, and
-    source-stamp presence of the exported file by itself, so a hand-edited,
-    malformed, or unstamped Data.lua fails here even without access to the
-    private data repo (HNH-25 follow-through, Sage validator-gap 1). It
-    cannot detect a well-formed but STALE Data.lua (correct shape, outdated
-    contents) — that needs the private repo's source data and is the
-    fidelity checker's job (Home_Dev/scripts/verify-handynotes-export.lua),
-    not this file's.
+    Schema and provenance check for the committed Data.lua. It validates the
+    shape, internal consistency, and versioned source stamp, so a hand-edited,
+    malformed, or unstamped file fails without needing its source data. It
+    cannot detect a well-formed but stale Data.lua; that requires comparison
+    with the current source data.
 
     Usage: lua5.1 tests/data_integrity.lua [path-to-Data.lua]
     Exit code 0 and "RESULT: OK" on success; exit code 1 and a problem list
@@ -29,15 +24,8 @@ local function isPositiveInt(n)
     return type(n) == "number" and n > 0 and n == math.floor(n)
 end
 
--- 1. Header stamp: must name a real Homestead version. "working-tree" (the
--- generator's default) or a missing stamp means the file was regenerated
--- without --source-version and its provenance is unverifiable. Matched only
--- against the header comment block itself (everything up to and including
--- the `]]` that closes it), not the whole file and not the gap after it
--- either, so a stray `-- Source: Homestead vX.Y.Z` comment planted anywhere
--- outside that block, including between the closing `]]` and `local _, ns`,
--- cannot be mistaken for the real stamp (Argus Gate 1 cycle 1 finding 5,
--- cycle 2 note 1).
+-- 1. Header stamp: must name a real Homestead version. A missing or working-tree
+-- stamp is unverifiable. Match it only inside the header block so a later lookalike cannot count.
 do
     local file = io.open(dataPath, "r")
     if not file then
@@ -48,7 +36,7 @@ do
         local _, headerEnd = text:find("]]", 1, true)
         local header = headerEnd and text:sub(1, headerEnd) or text
         if not header:match("Source:%s*Homestead%s+v%d+%.%d+%.%d+") then
-            fail("Data.lua was generated without --source-version")
+            fail("Data.lua is missing a versioned source stamp")
         end
     end
 end
@@ -113,10 +101,7 @@ else
                 if type(coord) ~= "number" or coord ~= math.floor(coord) then
                     fail("map %s: node coord %s is not an integer", tostring(mapID), tostring(coord))
                 else
-                    -- subPart (coord % 10000) is always in 0..9999 for any
-                    -- Lua number, negatives included, so a subPart range
-                    -- check can never fire; only mapPart is checked (Argus
-                    -- Gate 1 cycle 1, finding 4).
+                    -- subPart is always 0..9999, so only mapPart is checked.
                     local mapPart = math.floor(coord / 10000)
                     local subPart = coord % 10000
                     if mapPart < 0 or mapPart > 10000 then

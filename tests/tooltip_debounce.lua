@@ -1,13 +1,9 @@
 -- luacheck: push ignore 111 112 113
 
--- HNH-009 regression harness: item-load callbacks that land in the same
--- frame must coalesce into one tooltip re-render (QueueTooltipRefresh),
--- not one re-render per item -- the O(n^2) cold-cache hover cost on a large
--- vendor this ticket exists to bound. Unlike hnh004_zone_summary.lua's
--- shared C_Timer.After mock (which resolves synchronously and so cannot
--- show two loads landing before a render fires), this harness defers After
--- callbacks into a queue the test fires by hand, the only way to observe
--- coalescing at all.
+-- Item-load callbacks landing in the same frame must coalesce into one tooltip re-render
+-- (QueueTooltipRefresh), not one per item (O(n^2) on a large cold-cache vendor).
+-- Unlike the zone-summary harness's synchronous C_Timer.After mock, this harness queues After
+-- callbacks and fires them by hand: the only way to observe coalescing.
 
 local function check(condition, message)
     if not condition then
@@ -37,7 +33,7 @@ local function makeTooltip()
     return tooltip
 end
 
--- _G.X assignment throughout (matching hnh004_zone_summary.lua's harness),
+-- _G.X assignment throughout (matching zone_summary.lua's harness),
 -- not bare globals: these names are luacheck read_globals, and an unqualified
 -- assignment to one of them is flagged as mutating a read-only global.
 _G.GameTooltip = makeTooltip()
@@ -98,7 +94,7 @@ _G.CreateFrame = function(kind)
     }
     return loginFrame
 end
--- Deferred, unlike hnh004_zone_summary.lua's harness: queues callbacks for
+-- Deferred, unlike zone_summary.lua's harness: queues callbacks for
 -- the test to fire by hand instead of resolving them synchronously, which is
 -- the only way to observe two loads landing before a re-render fires.
 _G.C_Timer = {
@@ -154,6 +150,6 @@ registeredPlugin.OnLeave(pin)
 timerCallbacks[2]()
 check(renderCount == 4, "stale queued refresh does not repaint after leave")
 
-print("PASS: HNH-009 tooltip refreshes are coalesced per frame")
+print("PASS: tooltip refreshes are coalesced per frame")
 
 -- luacheck: pop

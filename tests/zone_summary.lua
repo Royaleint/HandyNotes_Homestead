@@ -197,6 +197,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
             self.scripts[scriptName] = callback
         end
         function frame:SetFrameStrata(strata) self.strata = strata end
+        function frame:SetParent(newParent) self.parent = newParent end
         function frame:SetClampedToScreen(value) self.clamped = value end
         function frame:EnableMouse(value) self.mouseEnabled = value end
         function frame:EnableMouseWheel(value) self.mouseWheelEnabled = value end
@@ -728,6 +729,98 @@ local function runSummaryCombatGuard()
     handler:OnClick("LeftButton", false, 800, 20003000)
     check(selectedMap() == 900 and #messages == 3, "summary OnClick out of combat must open the map without an error")
     r[8]()
+end
+
+-- HNH-33: summary badges are pooled, so repeat rebuilds must not create new frames and a reused badge must act on its new node.
+local function runSummaryBadgePool()
+    local data = {
+        Nodes = {
+            [101] = { [10001000] = 1 },
+            [102] = { [20002000] = 2 },
+            [201] = { [30003000] = 3 },
+        },
+        Vendors = {
+            [1] = { name = "Pool vendor one", items = {} },
+            [2] = { name = "Pool vendor two", items = {} },
+            [3] = { name = "Pool vendor three", items = {} },
+        },
+    }
+    local fixture = {
+        [800] = { mapID = 800, mapType = 1, name = "Pool world" },
+        [900] = { mapID = 900, mapType = 2, parentMapID = 800, name = "Pool continent A" },
+        [901] = { mapID = 901, mapType = 2, parentMapID = 800, name = "Pool continent B" },
+        [101] = { mapID = 101, mapType = 3, parentMapID = 900, name = "Pool zone one" },
+        [102] = { mapID = 102, mapType = 3, parentMapID = 900, name = "Pool zone two" },
+        [201] = { mapID = 201, mapType = 3, parentMapID = 901, name = "Pool zone three" },
+    }
+    local function rectangles(sourceMapID, targetMapID)
+        if targetMapID == 800 and (sourceMapID == 900 or sourceMapID == 901) then
+            return sourceMapID == 900 and 0.1 or 0.5, sourceMapID == 900 and 0.3 or 0.7, 0.2, 0.4
+        end
+        if targetMapID == 900 and (sourceMapID == 101 or sourceMapID == 102) then return 0.1, 0.2, 0.99985, 0.99995 end
+        if targetMapID == 901 and sourceMapID == 201 then return 0.1, 0.2, 0.99985, 0.99995 end
+        return nil
+    end
+    local poiMocks = { mapID = 800, width = 1000, height = 1000, summaryBadges = true }
+    local r = { loadRuntime({}, "Alliance", nil, data, fixture, rectangles, nil, nil, nil, nil, nil, {}, poiMocks) }
+    local tooltip, selectedMap, createdFrames = r[2], r[4], r[14]
+    local provider = poiMocks.provider
+    check(provider, "summary map provider must register for the badge pool test")
+
+    local function badgeCount()
+        local count = 0
+        for _, created in ipairs(createdFrames) do
+            if created.scripts.OnMouseUp then count = count + 1 end
+        end
+        return count
+    end
+    -- Returns the tooltip title and click target of every shown badge, keyed by title.
+    local function shownBadges()
+        local shown = {}
+        for _, created in ipairs(createdFrames) do
+            if created.scripts.OnMouseUp and created.shown then
+                created.scripts.OnEnter(created)
+                local title = tooltip.lines[1]
+                check(created.parent ~= _G.UIParent, "a shown badge must be parented to the canvas, not UIParent")
+                created.scripts.OnMouseUp(created, "LeftButton")
+                shown[title] = selectedMap()
+            end
+        end
+        return shown
+    end
+    local function showsExactly(expected, message)
+        local shown = shownBadges()
+        local shownCount, expectedCount = 0, 0
+        for title, target in pairs(shown) do
+            shownCount = shownCount + 1
+            check(expected[title] == target, message .. ": unexpected badge " .. tostring(title) .. " opening " .. tostring(target))
+        end
+        for _ in pairs(expected) do expectedCount = expectedCount + 1 end
+        check(shownCount == expectedCount, message .. ": expected " .. expectedCount .. " shown badges, got " .. shownCount)
+    end
+
+    provider:OnMapChanged()
+    showsExactly({ ["Pool continent A"] = 900, ["Pool continent B"] = 901 }, "world map")
+    check(badgeCount() == 2, "world map must create two badges, got " .. badgeCount())
+
+    poiMocks.mapID = 900
+    provider:OnMapChanged()
+    showsExactly({ ["Pool zone one"] = 101, ["Pool zone two"] = 102 }, "continent A after a map change")
+    check(badgeCount() == 2, "a map change must reuse the pooled badges, got " .. badgeCount())
+
+    poiMocks.mapID = 901
+    provider:OnMapChanged()
+    showsExactly({ ["Pool zone three"] = 201 }, "continent B after a map change")
+    check(badgeCount() == 2, "a smaller badge set must leave the extra pooled badge unused, got " .. badgeCount())
+
+    poiMocks.mapID = 900
+    for _ = 1, 25 do
+        provider:OnMapChanged()
+        provider:OnCanvasScaleChanged()
+        provider:OnCanvasSizeChanged()
+    end
+    showsExactly({ ["Pool zone one"] = 101, ["Pool zone two"] = 102 }, "continent A after repeat rebuilds")
+    check(badgeCount() == 2, "repeat rebuilds must not create badge frames, got " .. badgeCount())
 end
 
 local function runHomesteadGeographyRegression()
@@ -2005,6 +2098,7 @@ local function run()
     runWorldProjectionRegression()
     runHomesteadGeographyRegression()
     runSummaryCombatGuard()
+    runSummaryBadgePool()
     runVendorTooltipSearch()
     runVendorCostRender()
     runVendorCostRenderColdToWarm()

@@ -727,7 +727,7 @@ local function AddVendorHeader(tooltip, vendor)
     local mapID = vendorMapIDs[vendor]
     local mapInfo = mapID and C_Map.GetMapInfo(mapID)
     local zone = ClientName(mapInfo and mapInfo.name) or vendor.zone
-    -- Falls back to the shipped English text when the client has no name.
+    -- GetAreaInfo can return nil or "" despite its documentation; keep ClientName.
     local subzone = vendor.areaID and C_Map.GetAreaInfo and ClientName(C_Map.GetAreaInfo(vendor.areaID)) or vendor.subzone
     local location = (subzone and zone) and (subzone .. ", " .. zone) or subzone or zone
     if location then

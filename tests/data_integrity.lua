@@ -154,7 +154,7 @@ else
                 if not isPositiveInt(vendor.areaID) then
                     fail("%s: areaID is not a positive integer", vendorLabel)
                 end
-                if vendor.subzone == nil then
+                if vendor.subzone == nil or vendor.subzone == "" then
                     fail("%s: areaID without subzone", vendorLabel)
                 end
             end

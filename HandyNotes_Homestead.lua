@@ -402,6 +402,8 @@ end
 -- a count label. Use the same plain-frame/canvas approach as Homestead for
 -- summaries, while leaving ordinary zone and minimap pins with HandyNotes.
 local activeSummaryPins = {}
+-- Badge frames are never freed, so cleared ones wait here to be reused.
+local freeSummaryPins = {}
 
 function HNH:GetSummaryVisualSizes(uiScale)
     uiScale = uiScale or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
@@ -426,6 +428,8 @@ local function ClearSummaryPins()
         frame:Hide()
         frame:ClearAllPoints()
         frame:SetParent(UIParent)
+        frame.node = nil
+        freeSummaryPins[#freeSummaryPins + 1] = frame
         activeSummaryPins[index] = nil
     end
 end
@@ -483,34 +487,48 @@ local function RenderSummaryPins()
     local textOffset = math.max(1, math.floor(adjustedSize * 0.12))
     for coord, node in next, nodes do
         local x, y = HandyNotes:getXY(coord)
-        local frame = CreateFrame("Frame", nil, WorldMapFrame:GetCanvas())
+        local canvas = WorldMapFrame:GetCanvas()
+        local frame = freeSummaryPins[#freeSummaryPins]
+        if frame then
+            freeSummaryPins[#freeSummaryPins] = nil
+            frame:SetParent(canvas)
+        else
+            frame = CreateFrame("Frame", nil, canvas)
+            frame:EnableMouse(true)
+            frame.icon = frame:CreateTexture(nil, "ARTWORK")
+            frame.icon:SetPoint("TOP", frame, "TOP", 0, 0)
+            if type(summaryIconpath) == "table" then
+                frame.icon:SetTexture(summaryIconpath.icon)
+                frame.icon:SetTexCoord(summaryIconpath.tCoordLeft, summaryIconpath.tCoordRight, summaryIconpath.tCoordTop, summaryIconpath.tCoordBottom)
+            else
+                frame.icon:SetTexture(summaryIconpath)
+            end
+            frame.count = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal", 2)
+            frame.count:SetTextColor(1, 1, 1)
+            frame.count:SetShadowColor(0, 0, 0, 1)
+            frame.count:SetShadowOffset(1, -1)
+            -- Handlers read self.node; a pooled badge is reused for other nodes.
+            frame:SetScript("OnEnter", function(self)
+                if not self.node then return end
+                HNH:ShowSummaryTooltip(self, self.node)
+            end)
+            frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            frame:SetScript("OnMouseUp", function(self, button)
+                if not self.node then return end
+                if button == "LeftButton" then OpenSummaryMap(self.node) end
+            end)
+        end
+        frame.node = node
         local strata, frameLevel = HNH:GetSummaryFrameLayering()
         frame:SetFrameStrata(strata)
         frame:SetFrameLevel(frameLevel)
         frame:SetSize(adjustedSize, adjustedSize + fontSize + textOffset)
-        frame:EnableMouse(true)
-        frame.icon = frame:CreateTexture(nil, "ARTWORK")
-        frame.icon:SetPoint("TOP", frame, "TOP", 0, 0)
         frame.icon:SetSize(iconSize, iconSize)
-        if type(summaryIconpath) == "table" then
-            frame.icon:SetTexture(summaryIconpath.icon)
-            frame.icon:SetTexCoord(summaryIconpath.tCoordLeft, summaryIconpath.tCoordRight, summaryIconpath.tCoordTop, summaryIconpath.tCoordBottom)
-        else
-            frame.icon:SetTexture(summaryIconpath)
-        end
-        frame.count = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal", 2)
+        frame.count:ClearAllPoints()
         frame.count:SetPoint("TOP", frame.icon, "BOTTOM", 0, -textOffset)
         frame.count:SetText(tostring(node.vendorCount))
         local fontPath = frame.count:GetFont()
         frame.count:SetFont(fontPath, fontSize, "OUTLINE")
-        frame.count:SetTextColor(1, 1, 1)
-        frame.count:SetShadowColor(0, 0, 0, 1)
-        frame.count:SetShadowOffset(1, -1)
-        frame:SetScript("OnEnter", function(self) HNH:ShowSummaryTooltip(self, node) end)
-        frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        frame:SetScript("OnMouseUp", function(_, button)
-            if button == "LeftButton" then OpenSummaryMap(node) end
-        end)
         activeSummaryPins[#activeSummaryPins + 1] = frame
         PositionSummaryPin(frame, x, y)
     end

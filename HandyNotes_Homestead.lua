@@ -508,9 +508,13 @@ local function RenderSummaryPins()
             frame.count:SetShadowColor(0, 0, 0, 1)
             frame.count:SetShadowOffset(1, -1)
             -- Handlers read self.node; a pooled badge is reused for other nodes.
-            frame:SetScript("OnEnter", function(self) HNH:ShowSummaryTooltip(self, self.node) end)
+            frame:SetScript("OnEnter", function(self)
+                if not self.node then return end
+                HNH:ShowSummaryTooltip(self, self.node)
+            end)
             frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
             frame:SetScript("OnMouseUp", function(self, button)
+                if not self.node then return end
                 if button == "LeftButton" then OpenSummaryMap(self.node) end
             end)
         end

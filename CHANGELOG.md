@@ -14,6 +14,37 @@ ships an EMPTY changelog to CurseForge/Wago/GitHub on a green CI run.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-09
+
+### Added
+
+- The addon's tooltip and options text is now translated into ten client
+  languages: German, Spanish (Spain), Spanish (Mexico), French, Italian,
+  Korean, Brazilian Portuguese, Russian, Simplified Chinese and Traditional
+  Chinese.
+
+### Changed
+
+- The vendor's location in tooltips, the zone and, where the vendor has a
+  known area, the subzone, now shows in your game's language using the
+  game's own place names. If no translation is available, the English text
+  is shown as before.
+- Some tooltip and option labels now use the game's own wording.
+- Vendor data refreshed from Homestead 2.12.0.
+
+### Fixed
+
+- World map summary badges are now reused instead of being rebuilt every
+  time you change maps, zoom or resize the map, so the addon no longer piles
+  up map frames over a long play session.
+- Corrected 54 vendor currency prices across 20 vendors that were still
+  showing older, higher amounts in currencies such as Order Resources, War
+  Resources, Honor, Elemental Overflow and Resonance Crystals.
+- Samantha Buckley now appears on the Ruins of Gilneas zone map instead of
+  the Ruins of Gilneas City map.
+- Three vendor pins in the Hall of the Guardian, Arcantina and Silvermoon
+  City were moved to their correct spot.
+
 ## [1.1.3] - 2026-09-29
 
 ### Fixed

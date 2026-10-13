@@ -1,4 +1,4 @@
-## Interface: 120100
+## Interface: 120105
 ## Title: HandyNotes: Homestead
 ## Notes: Housing decor vendor map pins with wares tooltips. Lightweight HandyNotes plugin powered by Homestead's verified vendor data.
 ## Author: Nubs

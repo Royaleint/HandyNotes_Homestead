@@ -14,6 +14,15 @@ ships an EMPTY changelog to CurseForge/Wago/GitHub on a green CI run.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-13
+
+### Changed
+
+- Vendor data refreshed from Homestead 2.14.0. This adds the decor vendors
+  new in patch 12.1.5 (in the Shadowlands, Draenor, Argus, Dalaran,
+  Drustvar, Vol'dun, Stormwind and Silvermoon City) and corrects some
+  prices.
+
 ## [1.2.0] - 2026-10-09
 
 ### Added

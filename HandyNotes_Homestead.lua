@@ -226,6 +226,17 @@ local function NudgeSummaryCoordinate(nodes, x, y)
     return packedX * 10000 + packedY
 end
 
+-- factionByMap (a vendor with a node on two maps) holds each node's faction by map; nil shows to everyone, as with faction.
+local function VendorShownAt(vendor, mapID, faction)
+    local nodeFaction
+    if vendor.factionByMap then
+        nodeFaction = vendor.factionByMap[mapID]
+    else
+        nodeFaction = vendor.faction
+    end
+    return not nodeFaction or nodeFaction == faction
+end
+
 local function GetProjectedNodes(viewMapID, faction, isWorld)
     RefreshProfessionVisibilityCache()
     local factionKey = faction or "Neutral"
@@ -279,7 +290,7 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
                 end
                 for _, npcID in next, ns.Nodes[zoneMapID] do
                     local vendor = ns.Vendors[npcID]
-                    if vendor and HNH:IsProfessionVendorVisible(npcID) and (not vendor.faction or vendor.faction == faction) then
+                    if vendor and HNH:IsProfessionVendorVisible(npcID) and VendorShownAt(vendor, zoneMapID, faction) then
                         vendors[npcID] = true
                     end
                 end
@@ -326,7 +337,7 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
                     groupedZoneIDs[zoneMapID] = true
                     for _, npcID in next, ns.Nodes[zoneMapID] or {} do
                         local vendor = ns.Vendors[npcID]
-                        if vendor and HNH:IsProfessionVendorVisible(npcID) and (not vendor.faction or vendor.faction == faction) then
+                        if vendor and HNH:IsProfessionVendorVisible(npcID) and VendorShownAt(vendor, zoneMapID, faction) then
                             vendors[npcID] = true
                         end
                     end
@@ -362,7 +373,7 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
             local vendors = {}
             for _, npcID in next, ns.Nodes[zoneMapID] do
                 local vendor = ns.Vendors[npcID]
-                if vendor and HNH:IsProfessionVendorVisible(npcID) and (not vendor.faction or vendor.faction == faction) then
+                if vendor and HNH:IsProfessionVendorVisible(npcID) and VendorShownAt(vendor, zoneMapID, faction) then
                     vendors[npcID] = true
                 end
             end
@@ -563,7 +574,7 @@ local function NodeAt(uiMapID, coord, faction)
 end
 
 do
-    local playerFaction, pathScale
+    local playerFaction, pathScale, nodeMapID
 
     local function iter(nodes, prestate)
         if not nodes then return nil end
@@ -573,8 +584,8 @@ do
                 return coord, nil, summaryIconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
             end
             local vendor = ns.Vendors[node]
-            -- vendor.faction is set only for Alliance- or Horde-only vendors; nil means show to all.
-            if vendor and HNH:IsProfessionVendorVisible(node) and (not vendor.faction or vendor.faction == playerFaction) then
+            -- A nil faction for this node's map means it shows to everyone.
+            if vendor and HNH:IsProfessionVendorVisible(node) and VendorShownAt(vendor, nodeMapID, playerFaction) then
                 return coord, nil, iconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
             end
             coord, node = next(nodes, coord)
@@ -585,6 +596,7 @@ do
     function HNH:GetNodes2(uiMapID, minimap)
         playerFaction = UnitFactionGroup("player")
         pathScale = minimap and MINIMAP_PIN_SCALE or WORLD_PIN_SCALE
+        nodeMapID = uiMapID
         local nodes = ns.Nodes[uiMapID]
         if not minimap then
             local info = C_Map.GetMapInfo(uiMapID)

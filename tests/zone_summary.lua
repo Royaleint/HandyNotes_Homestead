@@ -531,6 +531,17 @@ local function buildCurrentDataProjectionFixture(data)
     return fixture, mapIDs, rectangleForMap
 end
 
+-- The per-node faction rule, stated independently of the plugin.
+local function expectedShownAt(vendor, mapID, faction)
+    local nodeFaction
+    if vendor.factionByMap then
+        nodeFaction = vendor.factionByMap[mapID]
+    else
+        nodeFaction = vendor.faction
+    end
+    return not nodeFaction or nodeFaction == faction
+end
+
 local function runCurrentDataProjectionCoverage()
     local data = { Nodes = realData.Nodes, Vendors = realData.Vendors }
     local fixture, mapIDs, rectangleForMap = buildCurrentDataProjectionFixture(data)
@@ -564,7 +575,7 @@ local function runCurrentDataProjectionCoverage()
             local eligible = false
             for _, npcID in pairs(data.Nodes[mapID]) do
                 local vendor = data.Vendors[npcID]
-                if vendor and (not vendor.faction or vendor.faction == faction.value) then
+                if vendor and expectedShownAt(vendor, mapID, faction.value) then
                     eligible = true
                     break
                 end
@@ -672,6 +683,97 @@ local function runWorldProjectionRegression()
     check(tooltip.lines[1] == "Fixture continent" and tooltip.lines[2] == "Vendors: 2" and tooltip.lines[3] == "Click to view continent", "world continent summary tooltip must identify the continent and aggregate count")
     handler.OnClick(pin, "LeftButton", false, 800, 20003000)
     check(selectedMap() == 900, "world continent summary click must open the continent map")
+end
+
+-- A vendor with a node on two maps carries a faction per map; each pin and summary follows its own node's map.
+local function runFactionByMap()
+    local data = {
+        Nodes = { [101] = { [10001000] = 7 }, [102] = { [20002000] = 7 } },
+        Vendors = { [7] = { name = "Two-map vendor", items = {}, factionByMap = { [101] = "Horde", [102] = "Alliance" } } },
+    }
+    local fixture = {
+        [800] = { mapID = 800, mapType = 1, name = "Fixture world" },
+        [900] = { mapID = 900, mapType = 2, parentMapID = 800, name = "Fixture continent" },
+        [101] = { mapID = 101, mapType = 3, parentMapID = 900, name = "Horde map" },
+        [102] = { mapID = 102, mapType = 3, parentMapID = 900, name = "Alliance map" },
+    }
+    local function rectangles(sourceMapID, targetMapID)
+        if sourceMapID == 101 and targetMapID == 900 then return 0.1, 0.3, 0.2, 0.4 end
+        if sourceMapID == 102 and targetMapID == 900 then return 0.5, 0.7, 0.6, 0.8 end
+        if sourceMapID == 900 and targetMapID == 800 then return 0.1, 0.3, 0.2, 0.4 end
+        return nil
+    end
+    local handler, _, _, _, setFaction = loadRuntime({}, "Alliance", nil, data, fixture, rectangles)
+    local coordOn = { [101] = 10001000, [102] = 20002000 }
+    local function summaries(mapID, kind)
+        local found = {}
+        for _, node in pairs(collect(handler, mapID, false)) do
+            local record = node.record
+            if type(record) == "table" and record.kind == kind then
+                found[#found + 1] = record
+            end
+        end
+        return found
+    end
+    for _, case in ipairs({ { faction = "Alliance", shown = 102, hidden = 101 }, { faction = "Horde", shown = 101, hidden = 102 } }) do
+        setFaction(case.faction)
+        for _, minimap in ipairs({ false, true }) do
+            check(collect(handler, case.shown, minimap)[coordOn[case.shown]], case.faction .. " must see the two-map vendor on map " .. case.shown)
+            check(not collect(handler, case.hidden, minimap)[coordOn[case.hidden]], case.faction .. " must not see the two-map vendor on map " .. case.hidden)
+        end
+        local zones = summaries(900, "zoneSummary")
+        check(#zones == 1 and zones[1].zoneMapID == case.shown and zones[1].vendorCount == 1, case.faction .. " continent must summarize only its own map")
+        local world = summaries(800, "continentSummary")
+        check(#world == 1 and world[1].vendorCount == 1, case.faction .. " world summary must count the two-map vendor once")
+    end
+    for _, faction in ipairs({ "Neutral", "none" }) do
+        setFaction(faction ~= "none" and faction or nil)
+        check(not collect(handler, 101, false)[10001000] and not collect(handler, 102, false)[20002000], faction .. " must not see the two-map vendor on either map")
+        check(#summaries(900, "zoneSummary") == 0 and #summaries(800, "continentSummary") == 0, faction .. " must get no summary")
+    end
+end
+
+-- The grouped continent loop must test each member node against its own map: group 2405 holds 2405 and 2599, so a group-level lookup would misread 2599's entry.
+local function runFactionByMapGrouped()
+    local data = {
+        Nodes = {
+            [2405] = { [10001000] = 1, [10002000] = 2, [10003000] = 3 },
+            [2599] = { [20001000] = 1, [20002000] = 2, [20003000] = 3 },
+        },
+        Vendors = {
+            [1] = { name = "Alliance entry on 2599 only", items = {}, factionByMap = { [2599] = "Alliance" } },
+            [2] = { name = "Horde on 2405, Alliance on 2599", items = {}, factionByMap = { [2405] = "Horde", [2599] = "Alliance" } },
+            [3] = { name = "Horde on both", items = {}, factionByMap = { [2405] = "Horde", [2599] = "Horde" } },
+        },
+    }
+    local fixture = {
+        [2537] = { mapID = 2537, mapType = 2, name = "Quel'Thalas" },
+        [2405] = { mapID = 2405, mapType = 3, parentMapID = 2537, name = "Voidstorm" },
+        [2599] = { mapID = 2599, mapType = 3, parentMapID = 2537, name = "Val" },
+    }
+    local function rectangles(sourceMapID, targetMapID)
+        if targetMapID == 2537 and sourceMapID == 2405 then return 0.2, 0.4, 0.3, 0.5 end
+        if targetMapID == 2537 and sourceMapID == 2599 then return 0.6, 0.8, 0.7, 0.9 end
+        return nil
+    end
+    local handler, _, _, _, setFaction = loadRuntime({}, "Alliance", nil, data, fixture, rectangles)
+    local expected = {
+        { faction = "Alliance", count = 2, why = "vendor 1 (2599 entry only; 2405 node has no entry, shown to all) and vendor 2 (2599 node), not vendor 3" },
+        { faction = "Horde", count = 3, why = "vendor 1 (no Horde-restricted entry), vendor 2 (2405 node) and vendor 3, once each" },
+    }
+    for _, case in ipairs(expected) do
+        setFaction(case.faction)
+        local found, total = nil, 0
+        for _, node in pairs(collect(handler, 2537, false)) do
+            local record = node.record
+            if type(record) == "table" and record.kind == "zoneSummary" then
+                total = total + 1
+                if record.zoneMapID == 2405 then found = record end
+            end
+        end
+        check(total == 1 and found, case.faction .. " grouped continent view must emit exactly one summary, for group 2405")
+        check(found.vendorCount == case.count, case.faction .. " grouped zone summary for 2405 expected " .. case.count .. " vendors (" .. case.why .. "; a nil entry shows to everyone, each node is tested against its own member map), got " .. tostring(found.vendorCount))
+    end
 end
 
 -- An addon-initiated map change in combat taints Blizzard's pin acquisition, so both summary click paths must refuse it and say why.
@@ -2176,6 +2278,8 @@ local function run()
     runNestedProjectionRegression()
     runHBDProjectionFallback()
     runWorldProjectionRegression()
+    runFactionByMap()
+    runFactionByMapGrouped()
     runHomesteadGeographyRegression()
     runSummaryCombatGuard()
     runSummaryBadgePool()

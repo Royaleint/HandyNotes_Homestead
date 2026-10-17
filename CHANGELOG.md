@@ -14,6 +14,24 @@ ships an EMPTY changelog to CurseForge/Wago/GitHub on a green CI run.
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-10-17
+
+### Added
+
+- New vendor pins for Rotha (The Common, Razorwind Shores), Jolli
+  Maxiboom (Razorwind Shores) and Holly Twinklebright (Founder's Point).
+- Unquestionably Griftah now has a pin in both Razorwind Shores and
+  Founder's Point. Each pin shows only to the faction of that
+  neighborhood, the same as every other neighborhood vendor.
+
+### Changed
+
+- Vendor data refreshed from Homestead 2.14.1.
+
+### Fixed
+
+- "Yen" Malone's pin in Razorwind Shores was moved to its correct spot.
+
 ## [1.2.1] - 2026-10-13
 
 ### Changed

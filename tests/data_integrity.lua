@@ -44,7 +44,7 @@ end
 local ns = {}
 assert(loadfile(dataPath))("HandyNotes_Homestead", ns)
 
-local VENDOR_FIELDS = { name = true, zone = true, subzone = true, areaID = true, faction = true, items = true }
+local VENDOR_FIELDS = { name = true, zone = true, subzone = true, areaID = true, faction = true, factionByMap = true, items = true }
 local ITEM_FIELDS = { id = true, price = true, currencies = true, items = true, otherCost = true }
 local COST_ENTRY_FIELDS = { id = true, amount = true }
 
@@ -84,6 +84,7 @@ end
 -- 2 + 4 + 5. Nodes shape, vendor fields, item fields.
 local mapCount, nodeCount, vendorCount, itemCount = 0, 0, 0, 0
 local nodeNpcCounts = {}
+local nodeNpcMaps = {}
 
 if type(ns.Nodes) ~= "table" then
     fail("ns.Nodes is not a table")
@@ -114,6 +115,9 @@ else
                         tostring(mapID), tostring(coord), tostring(npcID))
                 else
                     nodeNpcCounts[npcID] = (nodeNpcCounts[npcID] or 0) + 1
+                    local maps = nodeNpcMaps[npcID]
+                    if not maps then maps = {}; nodeNpcMaps[npcID] = maps end
+                    maps[mapID] = (maps[mapID] or 0) + 1
                 end
             end
         end
@@ -160,6 +164,24 @@ else
             end
             if vendor.faction ~= nil and vendor.faction ~= "Alliance" and vendor.faction ~= "Horde" then
                 fail("%s: faction is %s, expected Alliance or Horde", vendorLabel, tostring(vendor.faction))
+            end
+            if vendor.factionByMap ~= nil then
+                if vendor.faction ~= nil then
+                    fail("%s: has both faction and factionByMap", vendorLabel)
+                end
+                if type(vendor.factionByMap) ~= "table" or next(vendor.factionByMap) == nil then
+                    fail("%s: factionByMap is not a non-empty table", vendorLabel)
+                else
+                    local maps = nodeNpcMaps[npcID] or {}
+                    for mapID, mapFaction in pairs(vendor.factionByMap) do
+                        if not maps[mapID] then
+                            fail("%s: factionByMap key %s is not a map holding this vendor's node", vendorLabel, tostring(mapID))
+                        end
+                        if mapFaction ~= "Alliance" and mapFaction ~= "Horde" then
+                            fail("%s: factionByMap[%s] is %s, expected Alliance or Horde", vendorLabel, tostring(mapID), tostring(mapFaction))
+                        end
+                    end
+                end
             end
 
             if type(vendor.items) ~= "table" then
@@ -209,20 +231,45 @@ else
     end
 end
 
--- 3. Bijection between ns.Nodes and ns.Vendors.
+-- 3. Node rules.
 if type(ns.Nodes) == "table" and type(ns.Vendors) == "table" then
     for npcID, count in pairs(nodeNpcCounts) do
         if ns.Vendors[npcID] == nil then
             fail("node npcID %d has no matching ns.Vendors entry", npcID)
-        elseif count > 1 then
-            fail("npcID %d appears in %d nodes, expected exactly 1", npcID, count)
+        else
+            for mapID, onMap in pairs(nodeNpcMaps[npcID]) do
+                if onMap > 1 then
+                    fail("npcID %d appears in %d nodes on map %d, expected at most 1", npcID, onMap, mapID)
+                end
+            end
+            local vendor = ns.Vendors[npcID]
+            if count > 1 and type(vendor) == "table" and (vendor.subzone ~= nil or vendor.areaID ~= nil) then
+                fail("npcID %d has %d nodes and a subzone or areaID; that subzone would show on every map", npcID, count)
+            end
         end
     end
     for npcID in pairs(ns.Vendors) do
-        -- count > 1 is already reported by the nodeNpcCounts loop above.
+        -- Every vendor needs at least one node.
         if (nodeNpcCounts[npcID] or 0) == 0 then
             fail("ns.Vendors npcID %s has no matching node", tostring(npcID))
         end
+    end
+end
+
+-- 6. The shipped two-map vendor keeps a node and a faction on each map.
+do
+    local maps = nodeNpcMaps[267870] or {}
+    local mapTotal = 0
+    for _ in pairs(maps) do mapTotal = mapTotal + 1 end
+    if mapTotal ~= 2 or not maps[2351] or not maps[2352] then
+        fail("vendor 267870: expected nodes on exactly maps 2351 and 2352")
+    end
+    local vendor = type(ns.Vendors) == "table" and ns.Vendors[267870]
+    local byMap = type(vendor) == "table" and vendor.factionByMap
+    local byMapTotal = 0
+    if type(byMap) == "table" then for _ in pairs(byMap) do byMapTotal = byMapTotal + 1 end end
+    if byMapTotal ~= 2 or byMap[2351] ~= "Horde" or byMap[2352] ~= "Alliance" then
+        fail("vendor 267870: factionByMap expected { [2351] = Horde, [2352] = Alliance }")
     end
 end
 

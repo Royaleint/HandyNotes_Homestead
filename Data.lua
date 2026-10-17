@@ -1,7 +1,7 @@
 --[[
     HandyNotes_Homestead - Data
     GENERATED from Homestead vendor data: do not hand-edit.
-    Source: Homestead v2.14.0
+    Source: Homestead v2.14.1
 ]]
 
 local _, ns = ...
@@ -356,9 +356,12 @@ ns.Nodes = {
     [2351] = {
         [39417070] = 257295,
         [39477023] = 257303,
+        [39627311] = 255319,
         [39787024] = 255326,
         [39837277] = 255325,
-        [40307300] = 255319,
+        [40207292] = 267870,
+        [52375430] = 271366,
+        [53535660] = 254687,
         [53565849] = 255298,
         [53625448] = 267794,
         [53655804] = 256784,
@@ -379,11 +382,13 @@ ns.Nodes = {
         [52263781] = 255216,
         [53564096] = 255221,
         [53834166] = 267795,
+        [54393278] = 271604,
         [58306168] = 256750,
         [61657952] = 257297,
         [61707909] = 255228,
         [62298035] = 255230,
         [62388017] = 255222,
+        [62497922] = 267870,
     },
     [2393] = {
         [31657693] = 264056,
@@ -2668,6 +2673,19 @@ ns.Vendors = {
             { id = 247769, items = { { id = 137642, amount = 2 } } },
         },
     },
+    [254687] = {
+        name = "Rotha",
+        zone = "Razorwind Shores",
+        subzone = "The Common",
+        faction = "Horde",
+        items = {
+            { id = 274661, currencies = { { id = 3363, amount = 50 } } },
+            { id = 274673, currencies = { { id = 3363, amount = 50 } } },
+            { id = 274674, currencies = { { id = 3363, amount = 50 } } },
+            { id = 274675, currencies = { { id = 3363, amount = 50 } } },
+            { id = 274676, currencies = { { id = 3363, amount = 50 } } },
+        },
+    },
     [254944] = {
         name = "Tajaka Sawtusk",
         zone = "Zul'Aman",
@@ -4221,6 +4239,16 @@ ns.Vendors = {
             { id = 276246, currencies = { { id = 3363, amount = 10 } } },
         },
     },
+    [267870] = {
+        name = "Unquestionably Griftah",
+        zone = "Razorwind Shores",
+        factionByMap = { [2351] = "Horde", [2352] = "Alliance" },
+        items = {
+            { id = 244344, currencies = { { id = 3363, amount = 10 } } },
+            { id = 263875, currencies = { { id = 3363, amount = 10 } } },
+            { id = 276312, currencies = { { id = 3363, amount = 10 } } },
+        },
+    },
     [268228] = {
         name = "Jan'sari the Watchful",
         zone = "The Coiled Isle",
@@ -4260,6 +4288,48 @@ ns.Vendors = {
             { id = 280218, currencies = { { id = 3316, amount = 150 } } },
             { id = 281580, currencies = { { id = 3316, amount = 250 } } },
             { id = 281582, currencies = { { id = 3316, amount = 150 } } },
+        },
+    },
+    [271366] = {
+        name = "Jolli Maxiboom",
+        zone = "Razorwind Shores",
+        faction = "Horde",
+        items = {
+            { id = 280335, price = 1000000 },
+            { id = 248101, price = 1000000 },
+            { id = 282051, price = 1000000 },
+            { id = 282072, price = 1000000 },
+            { id = 282075, price = 1000000 },
+            { id = 282077, price = 5000000 },
+            { id = 282081, price = 5000000 },
+            { id = 282083, price = 5000000 },
+            { id = 282086, price = 2500000 },
+            { id = 282090, price = 1000000 },
+            { id = 282092, price = 5000000 },
+            { id = 282095, price = 5000000 },
+            { id = 282098, price = 1000000 },
+            { id = 282100, price = 1000000 },
+        },
+    },
+    [271604] = {
+        name = "Holly Twinklebright",
+        zone = "Founder's Point",
+        faction = "Alliance",
+        items = {
+            { id = 248101, price = 1000000 },
+            { id = 280335, price = 1000000 },
+            { id = 282051, price = 1000000 },
+            { id = 282072, price = 1000000 },
+            { id = 282075, price = 1000000 },
+            { id = 282077, price = 5000000 },
+            { id = 282081, price = 5000000 },
+            { id = 282083, price = 5000000 },
+            { id = 282086, price = 2500000 },
+            { id = 282090, price = 1000000 },
+            { id = 282092, price = 5000000 },
+            { id = 282095, price = 5000000 },
+            { id = 282098, price = 1000000 },
+            { id = 282100, price = 1000000 },
         },
     },
     [272751] = {

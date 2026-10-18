@@ -156,33 +156,37 @@ described above, and it means the same thing for every subcommand.
 
 8. **Commit.** Commit the release. The message is plain prose that says what
    changed and why, readable months later, and it carries no trailer of any
-   kind.
+   kind. The commit-gate hook judges the command text and the whole working
+   tree, so order the work as it enforces it: stage only the release files,
+   write the Argus marker in its own call
+   (`write-review-marker.mjs --gate argus --repo <abs path>`), then commit in
+   a separate call. The marker never shares a command with the commit. The
+   CHANGELOG and the TOC need an Argus marker; a Sage marker does not
+   satisfy them, and writing one gate's marker replaces the other's, so give
+   each commit its own marker just before it. Use `git -C <abs path>` rather
+   than a mid-command `cd`.
 
 9. **Tag.** Create an annotated tag (`git tag -a vX.Y.Z -m "..."`). Then
-   re-run `shipping-set` and `check-gate2` a second time — defense-in-depth
-   against tracker state changing mid-run — and run `check-tag <version>`,
-   which requires `git rev-parse vX.Y.Z^{commit}` to exactly equal
-   `git rev-parse HEAD`.
+   re-run `shipping-set` a second time — defense-in-depth against tracker
+   state changing mid-run — and run `check-tag <version>`, which requires
+   `git rev-parse vX.Y.Z^{commit}` to exactly equal `git rev-parse HEAD`.
+   `check-gate2` is not re-run here; step 2 is its only run.
 
-   Both re-runs repeat step 2's invocation exactly: the same
-   `--since <last-tag>` and every `--allow-sha` and `--allow-ticket` you
-   passed there, plus one more `--allow-sha` naming the release commit you
-   just made, `$(git rev-parse HEAD)`, which expands in both bash and
-   PowerShell. Both flags are needed because the guard rebuilds the whole
-   range on every run: a step-2 exception you leave off stops the run on
-   that commit again, and the release commit carries no ticket ID of its
-   own. `shipping-set` is the evidence: expect the same commit lines as
-   step 2 plus exactly one new `[no ticket, allowed]` line, the release
-   commit. Any other difference is a stop. `check-gate2` prints only the
-   mode and the per-ticket states, never the commit list, so it cannot
-   stand in for that comparison.
+   The `shipping-set` re-run repeats step 2's invocation exactly: the same
+   `--since <last-tag>` and every `--allow-sha` you passed there, plus one
+   more `--allow-sha` naming the release commit you just made,
+   `$(git rev-parse HEAD)`, which expands in both bash and PowerShell. The
+   extra flag is needed because the guard rebuilds the whole range on every
+   run: a step-2 exception you leave off stops the run on that commit again,
+   and the release commit carries no ticket ID of its own. `shipping-set` is
+   the evidence: expect the same commit lines as step 2 plus exactly one new
+   `[no ticket, allowed]` line, the release commit. Any other difference is a
+   stop.
 
-   In `automated` mode, both `check-gate2` and `check-tag` must pass before
-   either push in step 10. In `manual-confirm` mode `check-gate2` reports
-   `MANUAL-CONFIRM REQUIRED` again by design and can never pass, so what must
-   hold before the push is that `check-tag` passes and that the shipping set
-   is unchanged since Rawb's step-2 confirmation apart from the allowed
-   release commit.
+   Before either push in step 10, `check-tag` must pass and the shipping set
+   must be unchanged since step 2 apart from the allowed release commit. In
+   `manual-confirm` mode that includes Rawb's step-2 confirmation still
+   standing for exactly that set.
 
 10. **Push.** Push the commit, then push the specific tag only:
     `git push origin vX.Y.Z`. Never `git push --tags`.

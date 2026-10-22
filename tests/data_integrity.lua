@@ -387,9 +387,9 @@ if themes ~= nil or hasEndeavorRows then
             for index = 1, #themes.keywords do
                 local entry = themes.keywords[index]
                 -- The plugin matches keywords against lowered text, so an uppercase letter never matches.
-                if type(entry) ~= "table" or not isNonEmptyString(entry[1]) or not isNonEmptyString(entry[2])
-                        or entry[1] ~= entry[1]:lower() then
-                    fail("ns.EndeavorThemes.keywords[%d] is not a { lowercase keyword, theme } pair", index)
+                if type(entry) ~= "table" or not isNonEmptyString(entry.keyword) or not isNonEmptyString(entry.theme)
+                        or entry.keyword ~= entry.keyword:lower() then
+                    fail("ns.EndeavorThemes.keywords[%d] is not a { keyword = lowercase, theme = name } row", index)
                 end
             end
         end

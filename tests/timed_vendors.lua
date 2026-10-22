@@ -58,7 +58,11 @@ local function makeData(options)
     data.EndeavorThemes = {
         ids = { [15] = "Blood Elf", [17] = "Mechagnome" },
         titles = { ["Smell Sensation"] = "Niffen", ["Moderate Mechanization"] = "Mechagnome" },
-        keywords = { { "loamm", "Niffen" }, { "mechagon", "Mechagnome" } },
+        keywords = {
+            { keyword = "loamm", theme = "Niffen" },
+            { keyword = "mechagon", theme = "Mechagnome" },
+            { keyword = "gnome'ish", theme = "Mechagnome" },
+        },
         aliases = { [150359] = 248525 },
     }
     if options.unknownKind then
@@ -368,6 +372,7 @@ do
         { info = { initiativeID = 98, title = "x", vendorNPCID = 150359 }, npcID = 248525, label = "aliased vendor NPC field" },
         { info = { initiativeID = 98, title = "x", vendor = { npcID = 257897 } }, npcID = 257897, label = "nested vendor NPC field" },
         { info = { initiativeID = 98, title = "x", description = "Bring gifts to Loamm." }, npcID = 257897, label = "keyword" },
+        { info = { initiativeID = 98, title = "x", description = "Very Gnome'ish." }, npcID = 248525, label = "keyword with an apostrophe" },
         { info = { initiativeID = 98, title = "Aid for Harlowe Marl" }, npcID = 257897, label = "vendor name" },
         { info = { initiativeID = 98, title = "The Mechagnome Way" }, npcID = 248525, label = "theme name" },
     }
@@ -506,6 +511,75 @@ for _, name in ipairs({ "Homestead", "Homestead_DevBuild" }) do
     check(next(ctx.events) == nil, name .. " loaded: no events registered")
     check(ctx.handler == nil and ctx.calls.request == 0 and ctx.calls.get == 0, name .. " loaded: nothing registered or read")
     check(ctx.data.Vendors[273403] == nil, name .. " loaded: timed rows are not merged")
+end
+
+-- Optional: lua5.1 tests/timed_vendors.lua path/to/Data.lua also checks a generated file:
+-- every holiday ID, endeavor ID, title and keyword shows exactly the vendors it names.
+if arg and arg[1] then
+    local function loadData()
+        local data = {}
+        assert(loadfile(arg[1]))("HandyNotes_Homestead", data)
+        return data
+    end
+    local sample = loadData()
+    check(type(sample.TimedVendors) == "table" and type(sample.EndeavorThemes) == "table", "data file has timed tables")
+
+    -- Timed npcIDs shown on any timed map, for either faction.
+    local function shownAnywhere(opts)
+        local found = {}
+        for _, faction in ipairs({ "Alliance", "Horde" }) do
+            opts.faction = faction
+            opts.data = loadData()
+            local ctx = boot(opts)
+            ctx.fire("CALENDAR_UPDATE_EVENT_LIST")
+            for mapID in next, sample.TimedNodes do
+                for npcID in next, ctx.shown(mapID) do
+                    if sample.TimedVendors[npcID] then found[npcID] = true end
+                end
+            end
+        end
+        return found
+    end
+    -- The shown set must equal the timed vendors that match.
+    local function showsExactly(found, matches, label)
+        for npcID, vendor in next, sample.TimedVendors do
+            check((not found[npcID]) == (not matches(vendor)), label .. ": wrong visibility for " .. vendor.name)
+        end
+    end
+
+    local holidays, routes = {}, {}
+    for _, vendor in next, sample.TimedVendors do
+        if vendor.kind == "event" then
+            for _, holidayID in ipairs(vendor.holidayIDs) do holidays[holidayID] = vendor.event end
+        end
+    end
+    local holidayCount = 0
+    for holidayID, event in next, holidays do
+        local found = shownAnywhere({ events = { holidayEvent(holidayID) },
+            initiative = { isLoaded = true, initiativeID = 0, title = "", progressRequired = 0 } })
+        showsExactly(found, function(row) return row.kind == "event" and row.event == event end, "holiday " .. holidayID)
+        holidayCount = holidayCount + 1
+    end
+    for id, theme in next, sample.EndeavorThemes.ids do
+        routes[#routes + 1] = { info = { initiativeID = id, title = "" }, theme = theme, label = "ID " .. id }
+    end
+    for title, theme in next, sample.EndeavorThemes.titles do
+        routes[#routes + 1] = { info = { initiativeID = 9999, title = title }, theme = theme, label = "title " .. title }
+    end
+    for _, entry in ipairs(sample.EndeavorThemes.keywords) do
+        routes[#routes + 1] = { info = { initiativeID = 9999, title = "Help out", description = "About " .. entry.keyword .. "." },
+            theme = entry.theme, label = "keyword " .. entry.keyword }
+    end
+    local withoutVendor = 0
+    for _, route in ipairs(routes) do
+        route.info.isLoaded = true
+        route.info.progressRequired = 100
+        local found = shownAnywhere({ initiative = route.info })
+        showsExactly(found, function(row) return row.kind == "endeavor" and row.theme == route.theme end, route.label)
+        if next(found) == nil then withoutVendor = withoutVendor + 1 end
+    end
+    print(("Checked %s: %d holiday IDs, %d endeavor routes (%d name a theme with no vendor)."):format(
+        arg[1], holidayCount, #routes, withoutVendor))
 end
 
 print("PASS: holiday and endeavor vendors follow what is running")

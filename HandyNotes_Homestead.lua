@@ -1484,11 +1484,16 @@ local function ThemeFromText(text)
         local compactTheme = loweredTheme:gsub("[^%a%d]", "")
         if compactTheme ~= "" and compact:find(compactTheme, 1, true) then return theme end
     end
-    -- A keyword with a space matches the plain text; a one-word keyword matches with punctuation removed.
+    -- A keyword with a space matches the plain text; a one-word keyword matches with punctuation
+    -- removed from both sides, so "sin'dorei" still finds "Sin'dorei" or "Sindorei".
     for _, entry in ipairs(endeavorThemes.keywords) do
-        local token = entry[1]
-        local haystack = token:find(" ", 1, true) and lowered or compact
-        if haystack:find(token, 1, true) then return entry[2] end
+        local token = entry.keyword
+        local haystack = lowered
+        if not token:find(" ", 1, true) then
+            token = token:gsub("[^%a%d]", "")
+            haystack = compact
+        end
+        if token ~= "" and haystack:find(token, 1, true) then return entry.theme end
     end
     for _, entry in ipairs(endeavorVendorNames) do
         if lowered:find(entry[1], 1, true) then return entry[2] end

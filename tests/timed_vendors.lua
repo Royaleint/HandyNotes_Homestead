@@ -514,7 +514,7 @@ for _, name in ipairs({ "Homestead", "Homestead_DevBuild" }) do
 end
 
 -- Optional: lua5.1 tests/timed_vendors.lua path/to/Data.lua also checks a generated file:
--- every holiday ID, endeavor ID, title and keyword shows exactly the vendors it names.
+-- every holiday ID, endeavor ID, title, keyword and alias shows exactly the vendors it names.
 if arg and arg[1] then
     local function loadData()
         local data = {}
@@ -569,6 +569,10 @@ if arg and arg[1] then
     for _, entry in ipairs(sample.EndeavorThemes.keywords) do
         routes[#routes + 1] = { info = { initiativeID = 9999, title = "Help out", description = "About " .. entry.keyword .. "." },
             theme = entry.theme, label = "keyword " .. entry.keyword }
+    end
+    for variant, canonical in next, sample.EndeavorThemes.aliases do
+        routes[#routes + 1] = { info = { initiativeID = 9999, title = "Help out", vendorNPCID = variant },
+            theme = sample.TimedVendors[canonical].theme, label = "alias " .. variant }
     end
     local withoutVendor = 0
     for _, route in ipairs(routes) do

@@ -150,21 +150,20 @@ described above, and it means the same thing for every subcommand.
    ignore-rules-vs-shipped-files — that's covered by CI's
    TOC-vs-zip job, reported in step 11.
 
-7. **Diff review.** Show the full diff (version bump, changelog entries,
-   any other touched files) and get Rawb's explicit confirmation before
+7. **Diff review.** Always show Rawb the new public changelog entry in
+   full, as rendered text in the conversation, exactly as it will ship.
+   A diff, a summary, or a pointer to an earlier message does not count.
+   Then show the rest of the diff (version bump, internal changelog, any
+   other touched files) and get Rawb's explicit confirmation before
    committing. Do not commit on an assumed approval.
 
 8. **Commit.** Commit the release. The message is plain prose that says what
    changed and why, readable months later, and it carries no trailer of any
-   kind. The commit-gate hook judges the command text and the whole working
-   tree, so order the work as it enforces it: stage only the release files,
-   write the Argus marker in its own call
-   (`write-review-marker.mjs --gate argus --repo <abs path>`), then commit in
-   a separate call. The marker never shares a command with the commit. The
-   CHANGELOG and the TOC need an Argus marker; a Sage marker does not
-   satisfy them, and writing one gate's marker replaces the other's, so give
-   each commit its own marker just before it. Use `git -C <abs path>` rather
-   than a mid-command `cd`.
+   kind. Stage the release files and commit; the git commit gate runs on
+   its own. A Sage marker is needed only if protected data paths are staged
+   (`write-review-marker.mjs --gate sage --repo <abs path>`, after staging
+   and before a plain commit). There is no Argus marker: the CHANGELOG and
+   the TOC no longer need one.
 
 9. **Tag.** Create an annotated tag (`git tag -a vX.Y.Z -m "..."`). Then
    re-run `shipping-set` a second time — defense-in-depth against tracker

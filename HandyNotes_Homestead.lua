@@ -30,6 +30,8 @@ local defaults = {
     profile = {
         icon_scale = 1.0,
         icon_alpha = 1.0,
+        show_holiday_vendors = true,
+        show_endeavor_vendors = true,
     },
 }
 
@@ -78,6 +80,27 @@ local summaryIconpath = FALLBACK_ICON
 local professionVendorRequirements = { [256026] = 182 } -- Irodalmin requires Herbalism.
 local professionVisibilityKey
 
+-- Holiday and endeavor vendors show only while their holiday or endeavor is running.
+-- The key names what is showing now; the applied key is what the cached counts were built for.
+local timedVisibilityKey
+local appliedTimedVisibilityKey
+local activeHolidays -- nil until a calendar read succeeds, then the set of running holiday names
+local pendingCombatRescan = false
+local hasOpenedCalendarThisSession = false
+local holidayTicker
+local holidayEventByID = {} -- calendar event ID (as a string) -> holiday name
+local activeTheme
+local activeThemeKnown = false
+local activeEndeavorTitle
+local requestingInitiative = false
+-- The last endeavor payload read, so repeat updates with nothing new skip the theme lookup.
+local hasLastPayload = false
+local lastPayloadID, lastPayloadTitle, lastPayloadDesc, lastPayloadRequired
+local endeavorThemes = {}
+local endeavorThemeNames = {}
+local endeavorVendorNames = {}
+local pendingTimedRedraw = false
+
 -- Keep HNH's summary geography aligned with Homestead's established map rules.
 -- These are display rules only; the generated vendor data remains unchanged.
 local excludedContinents = { [572] = true, [1550] = true }
@@ -123,8 +146,9 @@ end
 local function RefreshProfessionVisibilityCache()
     -- Cache key tracks only Herbalism (182); extend it if professionVendorRequirements gains another skill line.
     local nextKey = PlayerHasSkillLine(182) and "herbalism" or "no_herbalism"
-    if nextKey == professionVisibilityKey then return end
+    if nextKey == professionVisibilityKey and timedVisibilityKey == appliedTimedVisibilityKey then return end
     professionVisibilityKey = nextKey
+    appliedTimedVisibilityKey = timedVisibilityKey
     continentNodes = {}
     worldNodes = {}
     ns.ZoneSummaryProjectionFailures = nil
@@ -237,6 +261,18 @@ local function VendorShownAt(vendor, mapID, faction)
     return not nodeFaction or nodeFaction == faction
 end
 
+-- Hidden whenever the setting is off or the holiday or endeavor can't be confirmed as running.
+local function TimedVendorShown(vendor)
+    local kind = vendor.kind
+    if kind == nil then return true end
+    if kind == "event" then
+        return db.profile.show_holiday_vendors and activeHolidays ~= nil and activeHolidays[vendor.event] == true or false
+    elseif kind == "endeavor" then
+        return db.profile.show_endeavor_vendors and activeThemeKnown and activeTheme ~= nil and activeTheme == vendor.theme or false
+    end
+    return false -- a kind this version doesn't know
+end
+
 local function GetProjectedNodes(viewMapID, faction, isWorld)
     RefreshProfessionVisibilityCache()
     local factionKey = faction or "Neutral"
@@ -290,7 +326,7 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
                 end
                 for _, npcID in next, ns.Nodes[zoneMapID] do
                     local vendor = ns.Vendors[npcID]
-                    if vendor and HNH:IsProfessionVendorVisible(npcID) and VendorShownAt(vendor, zoneMapID, faction) then
+                    if vendor and HNH:IsProfessionVendorVisible(npcID) and VendorShownAt(vendor, zoneMapID, faction) and TimedVendorShown(vendor) then
                         vendors[npcID] = true
                     end
                 end
@@ -337,7 +373,7 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
                     groupedZoneIDs[zoneMapID] = true
                     for _, npcID in next, ns.Nodes[zoneMapID] or {} do
                         local vendor = ns.Vendors[npcID]
-                        if vendor and HNH:IsProfessionVendorVisible(npcID) and VendorShownAt(vendor, zoneMapID, faction) then
+                        if vendor and HNH:IsProfessionVendorVisible(npcID) and VendorShownAt(vendor, zoneMapID, faction) and TimedVendorShown(vendor) then
                             vendors[npcID] = true
                         end
                     end
@@ -373,7 +409,7 @@ local function GetProjectedNodes(viewMapID, faction, isWorld)
             local vendors = {}
             for _, npcID in next, ns.Nodes[zoneMapID] do
                 local vendor = ns.Vendors[npcID]
-                if vendor and HNH:IsProfessionVendorVisible(npcID) and VendorShownAt(vendor, zoneMapID, faction) then
+                if vendor and HNH:IsProfessionVendorVisible(npcID) and VendorShownAt(vendor, zoneMapID, faction) and TimedVendorShown(vendor) then
                     vendors[npcID] = true
                 end
             end
@@ -585,7 +621,7 @@ do
             end
             local vendor = ns.Vendors[node]
             -- A nil faction for this node's map means it shows to everyone.
-            if vendor and HNH:IsProfessionVendorVisible(node) and VendorShownAt(vendor, nodeMapID, playerFaction) then
+            if vendor and HNH:IsProfessionVendorVisible(node) and VendorShownAt(vendor, nodeMapID, playerFaction) and TimedVendorShown(vendor) then
                 return coord, nil, iconpath, pathScale * db.profile.icon_scale, db.profile.icon_alpha
             end
             coord, node = next(nodes, coord)
@@ -734,6 +770,13 @@ local function ClientName(s)
     if type(s) == "string" and s ~= "" then return s end
 end
 
+-- Holiday names come from the data in English. The calendar's own title can't be read
+-- safely (it may be a protected value), so translate the known names here.
+local HOLIDAY_NAMES = {
+    ["Hallow's End"] = L["Hallow's End"],
+    ["Lunar Festival"] = L["Lunar Festival"],
+}
+
 local function AddVendorHeader(tooltip, vendor)
     tooltip:SetText(vendor.name)
     local mapID = vendorMapIDs[vendor]
@@ -744,6 +787,12 @@ local function AddVendorHeader(tooltip, vendor)
     local location = (subzone and zone) and (subzone .. ", " .. zone) or subzone or zone
     if location then
         tooltip:AddLine(location, 0.7, 0.7, 0.7)
+    end
+    if vendor.kind == "event" then
+        tooltip:AddLine(string.format(L["Holiday: %s"], HOLIDAY_NAMES[vendor.event] or vendor.event), 0.7, 0.7, 0.7)
+    elseif vendor.kind == "endeavor" then
+        -- The live title is already in the player's language; the theme name covers a payload without one.
+        tooltip:AddLine(string.format(L["Endeavor: %s"], activeEndeavorTitle or vendor.theme), 0.7, 0.7, 0.7)
     end
 end
 
@@ -1106,7 +1155,7 @@ function HNH:OnEnter(uiMapID, coord)
     end
 
     local vendor = ns.Vendors[node]
-    if not vendor or not HNH:IsProfessionVendorVisible(node) then return end
+    if not vendor or not HNH:IsProfessionVendorVisible(node) or not TimedVendorShown(vendor) then return end
     vendorMapIDs[vendor] = uiMapID
 
     if #vendor.items > LONG_WARES_THRESHOLD then
@@ -1198,6 +1247,359 @@ function HNH:OnClick(button, down, uiMapID, coord)
 end
 
 -------------------------------------------------------------------------------
+-- Holiday and endeavor vendors
+--
+-- These vendors are only there while their holiday or neighborhood endeavor
+-- is running, so their pins follow the calendar and the endeavor payload.
+-- Anything that can't be confirmed as running stays hidden.
+-------------------------------------------------------------------------------
+
+local HOLIDAY_RECHECK_SECONDS = 14400 -- backstop only; calendar updates do the real work
+local DIRECT_NPC_FIELDS = { "vendorNPCID", "vendorNpcID", "vendorID", "npcID" }
+
+-- Holiday and endeavor rows ship in their own tables so an older copy of this
+-- plugin never shows them. Fold them in once; never replace an existing row.
+local function MergeTimedVendors()
+    local timedVendors, timedNodes = ns.TimedVendors, ns.TimedNodes
+    if type(timedVendors) ~= "table" or type(timedNodes) ~= "table" then return end
+    for npcID, vendor in next, timedVendors do
+        if ns.Vendors[npcID] == nil then
+            ns.Vendors[npcID] = vendor
+        end
+    end
+    for mapID, mapNodes in next, timedNodes do
+        local nodes = ns.Nodes[mapID]
+        if not nodes then
+            nodes = {}
+            ns.Nodes[mapID] = nodes
+        end
+        for coord, npcID in next, mapNodes do
+            -- Only for a row merged above: a timed node must never add a pin to an ordinary vendor.
+            if nodes[coord] == nil and ns.Vendors[npcID] == timedVendors[npcID] then
+                nodes[coord] = npcID
+            end
+        end
+    end
+end
+
+local function BuildTimedVendorLookups()
+    local themes = type(ns.EndeavorThemes) == "table" and ns.EndeavorThemes or {}
+    endeavorThemes = {
+        ids = themes.ids or {},
+        titles = themes.titles or {},
+        keywords = themes.keywords or {},
+        aliases = themes.aliases or {},
+    }
+    local seenThemes = {}
+    for _, vendor in next, ns.Vendors do
+        if vendor.kind == "event" and vendor.holidayIDs then
+            for _, holidayID in ipairs(vendor.holidayIDs) do
+                -- Calendar event IDs can arrive as numbers or strings.
+                holidayEventByID[tostring(holidayID)] = vendor.event
+            end
+        elseif vendor.kind == "endeavor" and vendor.theme then
+            if not seenThemes[vendor.theme] then
+                seenThemes[vendor.theme] = true
+                endeavorThemeNames[#endeavorThemeNames + 1] = vendor.theme
+            end
+            endeavorVendorNames[#endeavorVendorNames + 1] = { vendor.name:lower(), vendor.theme }
+        end
+    end
+    -- Sorted so a text that names two themes resolves the same way every session.
+    table.sort(endeavorThemeNames)
+    table.sort(endeavorVendorNames, function(a, b) return a[1] < b[1] end)
+end
+
+local function HolidayTrackingOn()
+    return db.profile.show_holiday_vendors and next(holidayEventByID) ~= nil
+end
+
+local function EndeavorTrackingOn()
+    return db.profile.show_endeavor_vendors and #endeavorThemeNames > 0
+end
+
+-- Returns true only when what is shown changed; never redraws itself.
+local function RecomputeTimedVisibility()
+    local holidayPart
+    if not db.profile.show_holiday_vendors then
+        holidayPart = "off"
+    elseif activeHolidays == nil then
+        holidayPart = "unknown"
+    else
+        local names = {}
+        for name in next, activeHolidays do
+            names[#names + 1] = name
+        end
+        table.sort(names)
+        holidayPart = table.concat(names, ",")
+    end
+    local endeavorPart
+    if not db.profile.show_endeavor_vendors then
+        endeavorPart = "off"
+    elseif not activeThemeKnown then
+        endeavorPart = "unknown"
+    else
+        endeavorPart = activeTheme or "none"
+    end
+    local nextKey = holidayPart .. "|" .. endeavorPart
+    if nextKey == timedVisibilityKey then return false end
+    timedVisibilityKey = nextKey
+    return true
+end
+
+-- A redraw from addon code in combat taints the map's pin acquisition (see OpenSummaryMap), so wait for combat to end.
+local function RedrawTimedVendors()
+    if InCombatLockdown() then
+        pendingTimedRedraw = true
+        return
+    end
+    pendingTimedRedraw = false
+    HNH:SendMessage("HandyNotes_NotifyUpdate", PLUGIN_NAME)
+    RenderSummaryPins()
+end
+
+local function UpdateTimedVisibility()
+    if RecomputeTimedVisibility() then RedrawTimedVendors() end
+end
+
+-- CalendarFrame is nil until the calendar addon loads on demand.
+local function IsBlizzardCalendarShown()
+    return CalendarFrame ~= nil and CalendarFrame:IsShown()
+end
+
+-- Points the viewed month at today, as the calendar window does when it opens. Never
+-- while the window is open: the player may be paging it. True only if it moved the view.
+local function ViewTodaysMonth(today)
+    if C_Calendar and C_Calendar.SetAbsMonth and not IsBlizzardCalendarShown() then
+        C_Calendar.SetAbsMonth(today.month, today.year)
+        return true
+    end
+    return false
+end
+
+-- Returns the set of running holidays, or nil plus a reason when today can't be read.
+local function ScanTodaysHolidays()
+    if not C_Calendar or not C_Calendar.GetNumDayEvents or not C_Calendar.GetDayEvent then
+        return nil
+    end
+    if not HolidayTrackingOn() then return nil end
+
+    local today = C_DateAndTime and C_DateAndTime.GetCurrentCalendarTime and C_DateAndTime.GetCurrentCalendarTime()
+    if not today then return nil end
+
+    -- Day events are read from whichever month the calendar is viewing, which before
+    -- the window is first opened is a fixed old month, not today. Move the view to
+    -- today when it's safe, and otherwise keep the last answer rather than read another month.
+    local movedView = false
+    if C_Calendar.GetMonthInfo then
+        local monthInfo = C_Calendar.GetMonthInfo()
+        if monthInfo and (monthInfo.month ~= today.month or monthInfo.year ~= today.year) then
+            movedView = ViewTodaysMonth(today)
+            monthInfo = C_Calendar.GetMonthInfo()
+        end
+        if monthInfo and (monthInfo.month ~= today.month or monthInfo.year ~= today.year) then
+            return nil, "viewed_month_mismatch"
+        end
+    end
+
+    local numEvents = C_Calendar.GetNumDayEvents(0, today.monthDay)
+    if not numEvents then return nil end
+    -- Right after a move the month's events may not have loaded; an empty read then
+    -- proves nothing, so wait for the next calendar update to confirm.
+    if movedView and numEvents == 0 then return nil, "moved_unconfirmed" end
+
+    local found = {}
+    for index = 1, numEvents do
+        local event = C_Calendar.GetDayEvent(0, today.monthDay, index)
+        if event then
+            -- In combat the event ID can be a protected value that can't be used as a
+            -- key. Keep the last answer and read again once combat ends.
+            if issecretvalue and issecretvalue(event.eventID) then
+                return nil, "combat_secret"
+            end
+            local holidayName = holidayEventByID[tostring(event.eventID)]
+            if holidayName then
+                -- These two fields can be protected strings that throw when compared, so
+                -- read them only for our own holidays, guarded. If the guard trips, the ID
+                -- match alone counts as running. On the last day the event is ending, which reads as ended.
+                local ok, isRunning = pcall(function()
+                    return event.calendarType == "HOLIDAY" and event.sequenceType ~= "END"
+                end)
+                if not ok or isRunning then
+                    found[holidayName] = true
+                end
+            end
+        end
+    end
+    return found
+end
+
+local function RefreshHolidays()
+    local result, unavailableReason = ScanTodaysHolidays()
+    if result == nil then
+        if unavailableReason == "combat_secret" then
+            pendingCombatRescan = true
+        end
+        return
+    end
+    activeHolidays = result
+    UpdateTimedVisibility()
+end
+
+local function StartHolidayTracking()
+    if not HolidayTrackingOn() then return end
+    -- Opening the calendar is a server request, and loading screens repeat, so once per session.
+    if not hasOpenedCalendarThisSession and C_Calendar and C_Calendar.OpenCalendar then
+        hasOpenedCalendarThisSession = true
+        local today = C_DateAndTime and C_DateAndTime.GetCurrentCalendarTime and C_DateAndTime.GetCurrentCalendarTime()
+        if today then ViewTodaysMonth(today) end
+        C_Calendar.OpenCalendar()
+    end
+    -- The calendar can take a moment to answer.
+    C_Timer.After(2, function()
+        RefreshHolidays()
+        if not holidayTicker then
+            holidayTicker = C_Timer.NewTicker(HOLIDAY_RECHECK_SECONDS, RefreshHolidays)
+        end
+    end)
+end
+
+local function ThemeFromNpcFields(source)
+    for _, fieldName in ipairs(DIRECT_NPC_FIELDS) do
+        local npcID = tonumber(source[fieldName])
+        if npcID then
+            local vendor = ns.Vendors[endeavorThemes.aliases[npcID] or npcID]
+            if vendor and vendor.kind == "endeavor" then return vendor.theme end
+        end
+    end
+end
+
+local function ThemeFromText(text)
+    if type(text) ~= "string" or text == "" then return nil end
+    local lowered = text:lower()
+    local compact = lowered:gsub("[^%a%d]", "")
+    for _, theme in ipairs(endeavorThemeNames) do
+        local loweredTheme = theme:lower()
+        if lowered:find(loweredTheme, 1, true) then return theme end
+        local compactTheme = loweredTheme:gsub("[^%a%d]", "")
+        if compactTheme ~= "" and compact:find(compactTheme, 1, true) then return theme end
+    end
+    -- A keyword with a space matches the plain text; a one-word keyword matches with punctuation removed.
+    for _, entry in ipairs(endeavorThemes.keywords) do
+        local token = entry[1]
+        local haystack = token:find(" ", 1, true) and lowered or compact
+        if haystack:find(token, 1, true) then return entry[2] end
+    end
+    for _, entry in ipairs(endeavorVendorNames) do
+        if lowered:find(entry[1], 1, true) then return entry[2] end
+    end
+end
+
+-- Returns theme, known. known is nil while the payload hasn't loaded (keep the last
+-- answer), true with a nil theme when the neighborhood has no endeavor, false when unrecognized.
+local function ResolveEndeavorTheme(info)
+    if type(info) ~= "table" then return nil, false end
+    if info.isLoaded ~= true then return nil, nil end
+
+    -- The initiative ID is the same in every language, so it is tried first.
+    local initiativeID = tonumber(info.initiativeID)
+    local theme = initiativeID and endeavorThemes.ids[initiativeID]
+        or type(info.title) == "string" and endeavorThemes.titles[info.title]
+        or ThemeFromNpcFields(info)
+        or type(info.vendor) == "table" and ThemeFromNpcFields(info.vendor)
+        or ThemeFromText(info.description)
+        or ThemeFromText(info.title)
+    if theme then return theme, true end
+
+    -- A neighborhood with no endeavor running answers with this empty loaded payload.
+    if (initiativeID or 0) == 0 and (info.title == nil or info.title == "")
+            and (tonumber(info.progressRequired) or 0) == 0 then
+        return nil, true
+    end
+    return nil, false
+end
+
+local function RequestEndeavor()
+    local api = C_NeighborhoodInitiative
+    if not api or not api.RequestNeighborhoodInitiativeInfo or requestingInitiative then return end
+    requestingInitiative = true
+    pcall(api.RequestNeighborhoodInitiativeInfo)
+    requestingInitiative = false
+end
+
+-- Reads the endeavor payload into state without redrawing.
+local function ReadEndeavor()
+    local api = C_NeighborhoodInitiative
+    if not api or not api.GetNeighborhoodInitiativeInfo then return end
+    local ok, info = pcall(api.GetNeighborhoodInitiativeInfo)
+    if not ok or not info then return end
+    -- The update event fires for every contribution; a payload with nothing new changes nothing.
+    if type(info) == "table" and info.isLoaded == true and hasLastPayload and info.initiativeID == lastPayloadID
+            and info.title == lastPayloadTitle and info.description == lastPayloadDesc
+            and info.progressRequired == lastPayloadRequired then
+        return
+    end
+    local theme, known = ResolveEndeavorTheme(info)
+    if known == nil then return end
+    activeTheme, activeThemeKnown = theme, known
+    hasLastPayload = true
+    lastPayloadID, lastPayloadTitle, lastPayloadDesc = info.initiativeID, info.title, info.description
+    lastPayloadRequired = info.progressRequired
+    activeEndeavorTitle = ClientName(info.title)
+end
+
+local function RefreshEndeavor()
+    ReadEndeavor()
+    UpdateTimedVisibility()
+end
+
+local function RequestAndRefreshEndeavor()
+    if not EndeavorTrackingOn() then return end
+    RequestEndeavor()
+    RefreshEndeavor()
+end
+
+local function OnTimedVendorEvent(_, event)
+    if event == "NEIGHBORHOOD_INITIATIVE_UPDATED" then
+        -- This event is the answer to a request. Requesting again here would loop, so only read.
+        if EndeavorTrackingOn() then RefreshEndeavor() end
+    elseif event == "CALENDAR_UPDATE_EVENT_LIST" then
+        RefreshHolidays()
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        StartHolidayTracking()
+        RequestAndRefreshEndeavor()
+        -- The endeavor payload can arrive a little after the loading screen.
+        if EndeavorTrackingOn() then
+            C_Timer.After(0.5, RequestAndRefreshEndeavor)
+            C_Timer.After(2, RequestAndRefreshEndeavor)
+        end
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        if pendingCombatRescan then
+            pendingCombatRescan = false
+            RefreshHolidays()
+        end
+        -- After the rescan, which clears this flag when it redraws itself.
+        if pendingTimedRedraw then RedrawTimedVendors() end
+    end
+end
+
+local function StartTimedVendorTracking(eventFrame)
+    -- The handler goes in before any event is registered.
+    eventFrame:SetScript("OnEvent", OnTimedVendorEvent)
+    eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    eventFrame:RegisterEvent("CALENDAR_UPDATE_EVENT_LIST")
+    eventFrame:RegisterEvent("NEIGHBORHOOD_INITIATIVE_UPDATED")
+    eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    BuildTimedVendorLookups()
+    if EndeavorTrackingOn() then
+        RequestEndeavor()
+        ReadEndeavor()
+    end
+    -- No redraw here: the login notify that follows draws the first state.
+    RecomputeTimedVisibility()
+end
+
+-------------------------------------------------------------------------------
 -- Options (HandyNotes renders this inside its own config panel)
 -------------------------------------------------------------------------------
 
@@ -1208,6 +1610,14 @@ local options = {
     get = function(info) return db.profile[info.arg] end,
     set = function(info, value)
         db.profile[info.arg] = value
+        if value == true and info.arg == "show_holiday_vendors" then
+            StartHolidayTracking()
+        elseif value == true and info.arg == "show_endeavor_vendors" and EndeavorTrackingOn() then
+            RequestEndeavor()
+            ReadEndeavor()
+        end
+        -- The notify below redraws the pins; the world map's counted badges need their own redraw.
+        if RecomputeTimedVisibility() then RenderSummaryPins() end
         HNH:SendMessage("HandyNotes_NotifyUpdate", PLUGIN_NAME)
     end,
     args = {
@@ -1231,6 +1641,20 @@ local options = {
             min = 0.1, max = 1, step = 0.01,
             arg = "icon_alpha",
             order = 2,
+        },
+        show_holiday_vendors = {
+            type = "toggle",
+            name = L["Holiday vendors"],
+            desc = L["Show holiday vendor pins only while their holiday is running."],
+            arg = "show_holiday_vendors",
+            order = 3,
+        },
+        show_endeavor_vendors = {
+            type = "toggle",
+            name = L["Endeavor vendors"],
+            desc = L["Show endeavor vendor pins only while their endeavor is running in your neighborhood."],
+            arg = "show_endeavor_vendors",
+            order = 4,
         },
     },
 }
@@ -1517,6 +1941,7 @@ frame:SetScript("OnEvent", function(self)
     local _, devBuildLoaded = C_AddOns.IsAddOnLoaded("Homestead_DevBuild")
     if homesteadLoaded or devBuildLoaded then return end
 
+    MergeTimedVendors()
     db = LibStub("AceDB-3.0"):New("HandyNotesHomesteadDB", defaults, true)
     HBD = LibStub("HereBeDragons-2.0")
     iconpath = ResolveIcon()
@@ -1527,6 +1952,7 @@ frame:SetScript("OnEvent", function(self)
     InstallVendorPinLayering()
 
     HandyNotes:RegisterPluginDB(PLUGIN_NAME, HNH, options)
+    StartTimedVendorTracking(self)
 
     -- HandyNotes' own OnEnable pin sweep ran before this registration;
     -- without this notify, minimap pins would not appear until a zone change.

@@ -15,6 +15,15 @@ L["Icon Scale"] = "Icon Scale"
 L["Size of the vendor pins."] = "Size of the vendor pins."
 L["Transparency of the vendor pins."] = "Transparency of the vendor pins."
 
+L["Holiday vendors"] = "Holiday vendors"
+L["Show holiday vendor pins only while their holiday is running."] = "Show holiday vendor pins only while their holiday is running."
+L["Endeavor vendors"] = "Endeavor vendors"
+L["Show endeavor vendor pins only while their endeavor is running in your neighborhood."] = "Show endeavor vendor pins only while their endeavor is running in your neighborhood."
+L["Holiday: %s"] = "Holiday: %s"
+L["Endeavor: %s"] = "Endeavor: %s"
+L["Hallow's End"] = "Hallow's End"
+L["Lunar Festival"] = "Lunar Festival"
+
 -- The client's own text; the literal is only a fallback.
 -- Keep each on one line in exactly this form: the locale check parses it.
 L["Search"] = SEARCH or "Search"

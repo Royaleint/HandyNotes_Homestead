@@ -81,66 +81,79 @@ local function checkCostList(vendorLabel, itemLabel, listName, list)
     end
 end
 
--- 2 + 4 + 5. Nodes shape, vendor fields, item fields.
-local mapCount, nodeCount, vendorCount, itemCount = 0, 0, 0, 0
-local nodeNpcCounts = {}
-local nodeNpcMaps = {}
+-- 2 + 4 + 5. Nodes shape, vendor fields, item fields. Holiday and endeavor vendors
+-- ship in their own tables (ns.TimedNodes, ns.TimedVendors) and run through the same
+-- checks with their own labels; ns.Vendors rows keep the ordinary schema.
+local TIMED_VENDOR_FIELDS = { kind = true, event = true, holidayIDs = true, theme = true }
+for key in pairs(VENDOR_FIELDS) do TIMED_VENDOR_FIELDS[key] = true end
 
-if type(ns.Nodes) ~= "table" then
-    fail("ns.Nodes is not a table")
-else
-    for mapID, mapNodes in pairs(ns.Nodes) do
-        mapCount = mapCount + 1
+local function newStats()
+    return { maps = 0, nodes = 0, vendors = 0, items = 0 }
+end
+
+-- Returns per-npcID node counts and per-npcID { [mapID] = count }.
+local function checkNodes(tableName, nodes, prefix, stats)
+    local npcCounts, npcMaps = {}, {}
+    if type(nodes) ~= "table" then
+        fail("%s is not a table", tableName)
+        return npcCounts, npcMaps
+    end
+    for mapID, mapNodes in pairs(nodes) do
+        stats.maps = stats.maps + 1
         if not isPositiveInt(mapID) then
-            fail("ns.Nodes has a non-positive-integer mapID key (%s)", tostring(mapID))
+            fail("%s has a non-positive-integer mapID key (%s)", tableName, tostring(mapID))
         end
         if type(mapNodes) ~= "table" then
-            fail("ns.Nodes[%s] is not a table", tostring(mapID))
+            fail("%s[%s] is not a table", tableName, tostring(mapID))
         else
             for coord, npcID in pairs(mapNodes) do
-                nodeCount = nodeCount + 1
+                stats.nodes = stats.nodes + 1
                 if type(coord) ~= "number" or coord ~= math.floor(coord) then
-                    fail("map %s: node coord %s is not an integer", tostring(mapID), tostring(coord))
+                    fail("%smap %s: node coord %s is not an integer", prefix, tostring(mapID), tostring(coord))
                 else
                     -- subPart is always 0..9999, so only mapPart is checked.
                     local mapPart = math.floor(coord / 10000)
                     local subPart = coord % 10000
                     if mapPart < 0 or mapPart > 10000 then
-                        fail("map %s: node coord %s unpacks outside 0..10000 (%d, %d)",
-                            tostring(mapID), tostring(coord), mapPart, subPart)
+                        fail("%smap %s: node coord %s unpacks outside 0..10000 (%d, %d)",
+                            prefix, tostring(mapID), tostring(coord), mapPart, subPart)
                     end
                 end
                 if not isPositiveInt(npcID) then
-                    fail("map %s coord %s: npcID is not a positive integer (%s)",
-                        tostring(mapID), tostring(coord), tostring(npcID))
+                    fail("%smap %s coord %s: npcID is not a positive integer (%s)",
+                        prefix, tostring(mapID), tostring(coord), tostring(npcID))
                 else
-                    nodeNpcCounts[npcID] = (nodeNpcCounts[npcID] or 0) + 1
-                    local maps = nodeNpcMaps[npcID]
-                    if not maps then maps = {}; nodeNpcMaps[npcID] = maps end
+                    npcCounts[npcID] = (npcCounts[npcID] or 0) + 1
+                    local maps = npcMaps[npcID]
+                    if not maps then maps = {}; npcMaps[npcID] = maps end
                     maps[mapID] = (maps[mapID] or 0) + 1
                 end
             end
         end
     end
+    return npcCounts, npcMaps
 end
 
-if type(ns.Vendors) ~= "table" then
-    fail("ns.Vendors is not a table")
-else
-    for npcID, vendor in pairs(ns.Vendors) do
-        vendorCount = vendorCount + 1
-        local vendorLabel = string.format("vendor %s", tostring(npcID))
+local function checkVendors(tableName, vendors, fields, npcMaps, prefix, stats, checkKind)
+    if type(vendors) ~= "table" then
+        fail("%s is not a table", tableName)
+        return
+    end
+    for npcID, vendor in pairs(vendors) do
+        stats.vendors = stats.vendors + 1
+        local vendorLabel = string.format("%svendor %s", prefix, tostring(npcID))
         if not isPositiveInt(npcID) then
-            fail("ns.Vendors has a non-positive-integer npcID key (%s)", tostring(npcID))
+            fail("%s has a non-positive-integer npcID key (%s)", tableName, tostring(npcID))
         end
         if type(vendor) ~= "table" then
             fail("%s: value is not a table", vendorLabel)
         else
             for key in pairs(vendor) do
-                if not VENDOR_FIELDS[key] then
+                if not fields[key] then
                     fail("%s: unknown key %s (schema drift from the generator)", vendorLabel, tostring(key))
                 end
             end
+            if checkKind then checkKind(vendor, vendorLabel) end
 
             if type(vendor.name) ~= "string" or vendor.name == "" then
                 fail("%s: name is not a non-empty string", vendorLabel)
@@ -172,7 +185,7 @@ else
                 if type(vendor.factionByMap) ~= "table" or next(vendor.factionByMap) == nil then
                     fail("%s: factionByMap is not a non-empty table", vendorLabel)
                 else
-                    local maps = nodeNpcMaps[npcID] or {}
+                    local maps = npcMaps[npcID] or {}
                     for mapID, mapFaction in pairs(vendor.factionByMap) do
                         if not maps[mapID] then
                             fail("%s: factionByMap key %s is not a map holding this vendor's node", vendorLabel, tostring(mapID))
@@ -192,7 +205,7 @@ else
                 for _ in pairs(vendor.items) do itemsLen = itemsLen + 1 end
                 for index = 1, itemsLen do
                     local item = vendor.items[index]
-                    itemCount = itemCount + 1
+                    stats.items = stats.items + 1
                     if type(item) ~= "table" then
                         fail("%s: items[%d] is not a table", vendorLabel, index)
                     else
@@ -232,26 +245,161 @@ else
 end
 
 -- 3. Node rules.
-if type(ns.Nodes) == "table" and type(ns.Vendors) == "table" then
-    for npcID, count in pairs(nodeNpcCounts) do
-        if ns.Vendors[npcID] == nil then
-            fail("node npcID %d has no matching ns.Vendors entry", npcID)
+local function checkNodeRules(vendorsName, vendors, npcCounts, npcMaps, prefix)
+    if type(vendors) ~= "table" then return end
+    for npcID, count in pairs(npcCounts) do
+        if vendors[npcID] == nil then
+            fail("%snode npcID %d has no matching %s entry", prefix, npcID, vendorsName)
         else
-            for mapID, onMap in pairs(nodeNpcMaps[npcID]) do
+            for mapID, onMap in pairs(npcMaps[npcID]) do
                 if onMap > 1 then
-                    fail("npcID %d appears in %d nodes on map %d, expected at most 1", npcID, onMap, mapID)
+                    fail("%snpcID %d appears in %d nodes on map %d, expected at most 1", prefix, npcID, onMap, mapID)
                 end
             end
-            local vendor = ns.Vendors[npcID]
+            local vendor = vendors[npcID]
             if count > 1 and type(vendor) == "table" and (vendor.subzone ~= nil or vendor.areaID ~= nil) then
-                fail("npcID %d has %d nodes and a subzone or areaID; that subzone would show on every map", npcID, count)
+                fail("%snpcID %d has %d nodes and a subzone or areaID; that subzone would show on every map", prefix, npcID, count)
             end
         end
     end
-    for npcID in pairs(ns.Vendors) do
+    for npcID in pairs(vendors) do
         -- Every vendor needs at least one node.
-        if (nodeNpcCounts[npcID] or 0) == 0 then
-            fail("ns.Vendors npcID %s has no matching node", tostring(npcID))
+        if (npcCounts[npcID] or 0) == 0 then
+            fail("%s npcID %s has no matching node", vendorsName, tostring(npcID))
+        end
+    end
+end
+
+local stats = newStats()
+local nodeNpcCounts, nodeNpcMaps = checkNodes("ns.Nodes", ns.Nodes, "", stats)
+checkVendors("ns.Vendors", ns.Vendors, VENDOR_FIELDS, nodeNpcMaps, "", stats)
+if type(ns.Nodes) == "table" then
+    checkNodeRules("ns.Vendors", ns.Vendors, nodeNpcCounts, nodeNpcMaps, "")
+end
+
+-- 7. Holiday and endeavor vendors: each kind carries its own fields, and nothing
+-- is shared with the ordinary tables, since the plugin folds these in without overwriting.
+local timedStats = newStats()
+local hasTimed = ns.TimedVendors ~= nil or ns.TimedNodes ~= nil
+local hasEndeavorRows = false
+
+local function isNonEmptyString(value)
+    return type(value) == "string" and value ~= ""
+end
+
+local function checkTimedKind(vendor, vendorLabel)
+    if vendor.kind == "event" then
+        if not isNonEmptyString(vendor.event) then
+            fail("%s: event is not a non-empty string", vendorLabel)
+        end
+        local ids = vendor.holidayIDs
+        local idCount = 0
+        if type(ids) == "table" then for _ in pairs(ids) do idCount = idCount + 1 end end
+        if type(ids) ~= "table" or idCount == 0 or idCount ~= #ids then
+            fail("%s: holidayIDs is not a non-empty list", vendorLabel)
+        else
+            for index = 1, idCount do
+                if not isPositiveInt(ids[index]) then
+                    fail("%s: holidayIDs[%d] is not a positive integer (%s)", vendorLabel, index, tostring(ids[index]))
+                end
+            end
+        end
+        if vendor.theme ~= nil then
+            fail("%s: a holiday vendor has a theme", vendorLabel)
+        end
+    elseif vendor.kind == "endeavor" then
+        hasEndeavorRows = true
+        if not isNonEmptyString(vendor.theme) then
+            fail("%s: theme is not a non-empty string", vendorLabel)
+        end
+        if vendor.event ~= nil or vendor.holidayIDs ~= nil then
+            fail("%s: an endeavor vendor has holiday fields", vendorLabel)
+        end
+    else
+        fail("%s: kind is %s, expected event or endeavor", vendorLabel, tostring(vendor.kind))
+    end
+end
+
+if hasTimed then
+    local timedNpcCounts, timedNpcMaps = checkNodes("ns.TimedNodes", ns.TimedNodes, "timed ", timedStats)
+    checkVendors("ns.TimedVendors", ns.TimedVendors, TIMED_VENDOR_FIELDS, timedNpcMaps, "timed ", timedStats, checkTimedKind)
+    if type(ns.TimedNodes) == "table" then
+        checkNodeRules("ns.TimedVendors", ns.TimedVendors, timedNpcCounts, timedNpcMaps, "timed ")
+    end
+    if type(ns.TimedVendors) == "table" and type(ns.Vendors) == "table" then
+        for npcID in pairs(ns.TimedVendors) do
+            if ns.Vendors[npcID] ~= nil then
+                fail("timed vendor %s is also in ns.Vendors", tostring(npcID))
+            end
+        end
+    end
+    if type(ns.TimedNodes) == "table" and type(ns.Nodes) == "table" then
+        for mapID, mapNodes in pairs(ns.TimedNodes) do
+            local mainNodes = ns.Nodes[mapID]
+            if type(mapNodes) == "table" and type(mainNodes) == "table" then
+                for coord in pairs(mapNodes) do
+                    if mainNodes[coord] ~= nil then
+                        fail("timed map %s coord %s is also a node in ns.Nodes", tostring(mapID), tostring(coord))
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- 8. Endeavor theme lookups.
+local THEME_TABLES = { ids = true, titles = true, keywords = true, aliases = true }
+local themes = ns.EndeavorThemes
+if themes ~= nil or hasEndeavorRows then
+    if type(themes) ~= "table" then
+        fail("ns.EndeavorThemes is missing or not a table while endeavor vendors are present")
+    else
+        for key in pairs(themes) do
+            if not THEME_TABLES[key] then
+                fail("ns.EndeavorThemes has unknown key %s", tostring(key))
+            end
+        end
+        for key in pairs(THEME_TABLES) do
+            if type(themes[key]) ~= "table" then
+                fail("ns.EndeavorThemes.%s is not a table", key)
+            end
+        end
+        if type(themes.ids) == "table" then
+            for id, theme in pairs(themes.ids) do
+                if not isPositiveInt(id) or not isNonEmptyString(theme) then
+                    fail("ns.EndeavorThemes.ids[%s] is not a positive ID mapped to a theme name", tostring(id))
+                end
+            end
+        end
+        if type(themes.titles) == "table" then
+            for title, theme in pairs(themes.titles) do
+                if not isNonEmptyString(title) or not isNonEmptyString(theme) then
+                    fail("ns.EndeavorThemes.titles[%s] is not a title mapped to a theme name", tostring(title))
+                end
+            end
+        end
+        if type(themes.keywords) == "table" then
+            local count = 0
+            for _ in pairs(themes.keywords) do count = count + 1 end
+            if count ~= #themes.keywords then
+                fail("ns.EndeavorThemes.keywords is not a list")
+            end
+            for index = 1, #themes.keywords do
+                local entry = themes.keywords[index]
+                -- The plugin matches keywords against lowered text, so an uppercase letter never matches.
+                if type(entry) ~= "table" or not isNonEmptyString(entry[1]) or not isNonEmptyString(entry[2])
+                        or entry[1] ~= entry[1]:lower() then
+                    fail("ns.EndeavorThemes.keywords[%d] is not a { lowercase keyword, theme } pair", index)
+                end
+            end
+        end
+        if type(themes.aliases) == "table" then
+            for variant, canonical in pairs(themes.aliases) do
+                local target = type(ns.TimedVendors) == "table" and ns.TimedVendors[canonical]
+                if not isPositiveInt(variant) or type(target) ~= "table" or target.kind ~= "endeavor" then
+                    fail("ns.EndeavorThemes.aliases[%s] does not point at an endeavor vendor", tostring(variant))
+                end
+            end
         end
     end
 end
@@ -273,7 +421,11 @@ do
     end
 end
 
-print(string.format("Checked: %d vendors, %d maps (%d nodes), %d items.", vendorCount, mapCount, nodeCount, itemCount))
+print(string.format("Checked: %d vendors, %d maps (%d nodes), %d items.", stats.vendors, stats.maps, stats.nodes, stats.items))
+if hasTimed then
+    print(string.format("Checked timed: %d vendors, %d maps (%d nodes), %d items.",
+        timedStats.vendors, timedStats.maps, timedStats.nodes, timedStats.items))
+end
 
 if #problems == 0 then
     print("RESULT: OK")

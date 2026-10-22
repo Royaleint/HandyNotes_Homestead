@@ -14,6 +14,27 @@ ships an EMPTY changelog to CurseForge/Wago/GitHub on a green CI run.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-22
+
+### Added
+
+- Holiday vendor pins for Hallow's End and the Lunar Festival. Each shows
+  only while its holiday is running, and the tooltip names the holiday.
+- Neighborhood endeavor vendor pins in Founder's Point and Razorwind Shores,
+  covering 12 vendors across 10 endeavor themes. A vendor shows only while its
+  endeavor is running in your neighborhood, and the tooltip names the
+  endeavor.
+- Two new options, "Holiday vendors" and "Endeavor vendors". Both are on by
+  default, and each turns off its kind of pin.
+
+### Changed
+
+- Vendor data refreshed from Homestead 2.14.2.
+
+### Fixed
+
+- Corrected some vendor prices and one pin location.
+
 ## [1.2.2] - 2026-10-17
 
 ### Added

@@ -1449,11 +1449,14 @@ end
 local function StartHolidayTracking()
     if not HolidayTrackingOn() then return end
     -- Opening the calendar is a server request, and loading screens repeat, so once per session.
+    -- The calendar window makes the same request when it opens, so an open window already has it.
     if not hasOpenedCalendarThisSession and C_Calendar and C_Calendar.OpenCalendar then
         hasOpenedCalendarThisSession = true
-        local today = C_DateAndTime and C_DateAndTime.GetCurrentCalendarTime and C_DateAndTime.GetCurrentCalendarTime()
-        if today then ViewTodaysMonth(today) end
-        C_Calendar.OpenCalendar()
+        if not IsBlizzardCalendarShown() then
+            local today = C_DateAndTime and C_DateAndTime.GetCurrentCalendarTime and C_DateAndTime.GetCurrentCalendarTime()
+            if today then ViewTodaysMonth(today) end
+            C_Calendar.OpenCalendar()
+        end
     end
     -- The calendar can take a moment to answer.
     C_Timer.After(2, function()
@@ -1621,8 +1624,12 @@ local options = {
             RequestEndeavor()
             ReadEndeavor()
         end
-        -- The notify below redraws the pins; the world map's counted badges need their own redraw.
-        if RecomputeTimedVisibility() then RenderSummaryPins() end
+        if info.arg == "show_holiday_vendors" or info.arg == "show_endeavor_vendors" then
+            -- Waits for combat to end like any other change to which timed vendors show.
+            RecomputeTimedVisibility()
+            RedrawTimedVendors()
+            return
+        end
         HNH:SendMessage("HandyNotes_NotifyUpdate", PLUGIN_NAME)
     end,
     args = {

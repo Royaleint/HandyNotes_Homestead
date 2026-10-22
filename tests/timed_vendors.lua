@@ -299,6 +299,33 @@ do
     check(not ctx.shown(37)[273403], "holiday vendor stays hidden while today can't be read")
 end
 
+-- Paging the open window to another month keeps the last answer instead of reading that month.
+do
+    local ctx = boot({ events = { holidayEvent(324) } })
+    ctx.fire("CALENDAR_UPDATE_EVENT_LIST")
+    check(ctx.shown(37)[273403], "Hallow's End vendor shown before the window opens")
+    local reads, moves, notify = ctx.calls.numDayEvents, ctx.calls.setMonth, ctx.notify
+    ctx.calendarShown = true
+    ctx.viewed = { month = 3, year = 2027 }
+    ctx.fire("CALENDAR_UPDATE_EVENT_LIST")
+    check(ctx.shown(37)[273403], "a paged window keeps the running holiday shown")
+    check(ctx.calls.numDayEvents == reads, "a paged window's month is never read")
+    check(ctx.calls.setMonth == moves and ctx.notify == notify, "a paged window changes nothing")
+end
+
+-- The calendar window asks the server itself when it opens, so an open window gets no second request.
+do
+    local ctx = boot({ calendarShown = true })
+    ctx.fire("PLAYER_ENTERING_WORLD")
+    check(ctx.calls.open == 0, "no calendar request while the window is open")
+    ctx.calendarShown = false
+    ctx.fire("PLAYER_ENTERING_WORLD")
+    check(ctx.calls.open == 0, "the window's request counts for the session")
+    local closed = boot()
+    closed.fire("PLAYER_ENTERING_WORLD")
+    check(closed.calls.open == 1, "with the window closed the plugin asks once")
+end
+
 -- A protected event ID in combat keeps the last answer and rereads once combat ends.
 do
     local ctx = boot({ events = { holidayEvent(324) } })
@@ -422,6 +449,29 @@ do
     ctx.fire("PLAYER_REGEN_ENABLED")
     check(ctx.notify == ctx.loginNotify + 1, "nothing left to redraw")
     check(ctx.shown(2352)[248525] and ctx.shown(37)[273403], "the held changes are shown")
+end
+
+-- Turning a setting off or on in combat also waits, then redraws once.
+do
+    local ctx = boot({ events = { holidayEvent(324) } })
+    ctx.fire("CALENDAR_UPDATE_EVENT_LIST")
+    local notify = ctx.notify
+    ctx.inCombat = true
+    ctx.setOption("show_holiday_vendors", false)
+    ctx.setOption("show_endeavor_vendors", false)
+    check(ctx.notify == notify, "a setting change in combat does not redraw")
+    ctx.inCombat = false
+    ctx.fire("PLAYER_REGEN_ENABLED")
+    check(ctx.notify == notify + 1, "one redraw when combat ends")
+    check(not ctx.shown(37)[273403], "the held setting is applied")
+    ctx.inCombat = true
+    ctx.setOption("show_holiday_vendors", true)
+    check(ctx.notify == notify + 1, "turning it back on in combat waits too")
+    ctx.inCombat = false
+    ctx.fire("PLAYER_REGEN_ENABLED")
+    check(ctx.notify == notify + 2 and ctx.shown(37)[273403], "and redraws once after")
+    ctx.setOption("show_holiday_vendors", false)
+    check(ctx.notify == notify + 3, "out of combat a setting change redraws at once")
 end
 
 -- Settings off: hidden, and the holiday setting off never touches the calendar.

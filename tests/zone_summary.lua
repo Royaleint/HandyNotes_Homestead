@@ -29,6 +29,7 @@ end
 
 local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider, hbdTranslation, professionSkillLineID, itemNames, currencyNames, itemIcons, pins, poiMocks)
     local registered
+    local registeredOptions
     local frame
     local factionState = { value = faction }
     local tooltip = { lines = {}, owner = nil, scripts = {}, hookInstallations = 0 }
@@ -112,6 +113,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         "C_Item", "Item", "C_Timer", "HandyNotes", "LibStub", "GetProfessions", "GetProfessionInfo",
         "hooksecurefunc", "C_AreaPoiInfo", "CreateFromMixins", "MapCanvasDataProviderMixin",
         "InCombatLockdown", "UIErrorsFrame", "ERR_NOT_IN_COMBAT",
+        "C_Calendar", "C_DateAndTime", "C_NeighborhoodInitiative", "CalendarFrame", "issecretvalue",
     }
     local originalGlobals = {}
     for index = 1, #globalNames do
@@ -427,7 +429,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         end,
     }
     _G.HandyNotes = {
-        RegisterPluginDB = function(_, _, handler) registered = handler end,
+        RegisterPluginDB = function(_, _, handler, options) registered = handler; registeredOptions = options end,
         getXY = function(_, coord) return math.floor(coord / 10000) / 10000, (coord % 10000) / 10000 end,
     }
     if pinLayeringEnabled then
@@ -452,7 +454,14 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     _G.LibStub = function(name)
         libStubCalls = libStubCalls + 1
         if name == "AceDB-3.0" then
-            return { New = function() return { profile = { icon_scale = 1, icon_alpha = 1 } } end }
+            -- Missing keys take the plugin's defaults, as AceDB would.
+            return { New = function(_, _, defaults)
+                local profile = { icon_scale = 1, icon_alpha = 1 }
+                for key, value in pairs(defaults and defaults.profile or {}) do
+                    if profile[key] == nil then profile[key] = value end
+                end
+                return { profile = profile }
+            end }
         end
         if name == "HereBeDragons-2.0" then
             return { TranslateZoneCoordinates = function(_, x, y, sourceMapID, targetMapID)
@@ -472,7 +481,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
         function() return rectangleCalls, rectangleOrder end, forcedZoneOrder, restore, data,
         function(value) itemCached = value end, itemLoadCallbacks, editBoxes, timers, createdFrames,
         function() return hookInstallations end, function() return libStubCalls end, itemLoadCallbacksByID,
-        function() return hookSecureFuncInstalls end
+        function() return hookSecureFuncInstalls end, function() return registeredOptions end
 end
 
 local function collect(handler, mapID, minimap)
@@ -2158,6 +2167,65 @@ local function runVendorPinSize()
     end
 end
 
+-- A holiday vendor counts in a continent summary only while its pin would show; with the
+-- holiday unknown, not running, or both settings off, every count equals a build without it.
+local function runTimedVendorCounts()
+    local function makeData(withTimed)
+        local data = {
+            Nodes = { [101] = { [10001000] = 1 } },
+            Vendors = { [1] = { name = "Ordinary vendor", zone = "Zone One", items = {} } },
+        }
+        if withTimed then
+            data.TimedNodes = { [101] = { [20002000] = 2 } }
+            data.TimedVendors = {
+                [2] = { name = "Holiday vendor", zone = "Zone One", items = {}, kind = "event", event = "Hallow's End", holidayIDs = { 324 } },
+            }
+        end
+        return data
+    end
+    local function zoneCount(handler)
+        for _, node in pairs(collect(handler, 900, false)) do
+            if type(node.record) == "table" and node.record.zoneMapID == 101 then return node.record.vendorCount end
+        end
+        return 0
+    end
+
+    local plain = { loadRuntime({}, "Alliance", nil, makeData(false)) }
+    local baseline = zoneCount(plain[1])
+    plain[8]()
+    check(baseline == 1, "timed count baseline expected 1, got " .. tostring(baseline))
+
+    local r = { loadRuntime({}, "Alliance", nil, makeData(true)) }
+    local handler, registrationFrame, options = r[1], r[14][1], r[19]()
+    local events = {}
+    _G.C_DateAndTime = { GetCurrentCalendarTime = function() return { month = 10, year = 2026, monthDay = 25 } end }
+    _G.C_Calendar = {
+        GetMonthInfo = function() return { month = 10, year = 2026 } end,
+        GetNumDayEvents = function() return #events end,
+        GetDayEvent = function(_, _, index) return events[index] end,
+    }
+    local function calendarUpdate(dayEvents)
+        events = dayEvents
+        registrationFrame.scripts.OnEvent(registrationFrame, "CALENDAR_UPDATE_EVENT_LIST")
+    end
+    local hallowsEnd = { { eventID = 324, calendarType = "HOLIDAY", sequenceType = "ONGOING" } }
+
+    check(zoneCount(handler) == baseline, "unknown holiday state must leave the count at the baseline")
+    check(not collect(handler, 101, false)[20002000], "unknown holiday state must hide the zone pin")
+    calendarUpdate(hallowsEnd)
+    check(zoneCount(handler) == baseline + 1, "a running holiday must add its vendor to the count")
+    check(collect(handler, 101, false)[20002000], "a running holiday must show the zone pin")
+    calendarUpdate({})
+    check(zoneCount(handler) == baseline, "the count must drop back once the calendar reports no holiday")
+    calendarUpdate(hallowsEnd)
+    options.set({ arg = "show_holiday_vendors" }, false)
+    options.set({ arg = "show_endeavor_vendors" }, false)
+    check(zoneCount(handler) == baseline, "both settings off must leave the count at the baseline while the holiday runs")
+    calendarUpdate(hallowsEnd)
+    check(zoneCount(handler) == baseline and not collect(handler, 101, false)[20002000], "a calendar update while off must not show the vendor")
+    r[8]()
+end
+
 local function run()
     local standalone = { loadRuntime({}, "Alliance") }
     check(standalone[1], "standalone registration did not capture a plugin handler")
@@ -2292,6 +2360,7 @@ local function run()
     runPoiNudge()
     runPinSeparation()
     runVendorPinSize()
+    runTimedVendorCounts()
 end
 
 local ok, err = xpcall(run, debug.traceback)

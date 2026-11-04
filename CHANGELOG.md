@@ -14,6 +14,22 @@ ships an EMPTY changelog to CurseForge/Wago/GitHub on a green CI run.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-03
+
+### Added
+
+- Vendor pins for Victor Esquivias in Boralus, Samia Inkling in The Waking
+  Shores and the Amani Representative in Silvermoon City.
+
+### Changed
+
+- Vendor data updated from Homestead 2.16.0, with corrections to some
+  vendor prices and item listings.
+
+### Removed
+
+- Dyezertauren in Razorwind Shores, who has only been seen on the test realm.
+
 ## [1.3.0] - 2026-10-22
 
 ### Added

@@ -1,7 +1,7 @@
 --[[
     HandyNotes_Homestead - Data
     GENERATED from Homestead vendor data: do not hand-edit.
-    Source: Homestead v2.14.2
+    Source: Homestead v2.16.0
 ]]
 
 local _, ns = ...
@@ -257,6 +257,7 @@ ns.Nodes = {
         [56004600] = 246721,
         [67602160] = 135808,
         [70741566] = 252345,
+        [73941262] = 143244,
     },
     [1164] = {
         [36905920] = 252326,
@@ -295,6 +296,7 @@ ns.Nodes = {
         [59513207] = 158556,
     },
     [2022] = {
+        [24705679] = 188623,
         [47008260] = 189226,
         [47808200] = 188265,
         [61807380] = 191025,
@@ -364,7 +366,6 @@ ns.Nodes = {
         [53535660] = 254687,
         [53565849] = 255298,
         [53625448] = 267794,
-        [53655804] = 256784,
         [53705755] = 255301,
         [53805740] = 253596,
         [53805940] = 255299,
@@ -396,6 +397,7 @@ ns.Nodes = {
         [39257993] = 276364,
         [39298025] = 266188,
         [39337994] = 276365,
+        [39478009] = 276366,
         [39508017] = 276363,
         [43175542] = 256009,
         [44046277] = 252916,
@@ -557,7 +559,7 @@ ns.Vendors = {
         subzone = "Winterfin Retreat",
         areaID = 4099,
         items = {
-            { id = 258220, items = { { id = 34597, amount = 50 } } },
+            { id = 258220, items = { { id = 34597, amount = 20 } } },
         },
     },
     [27391] = {
@@ -652,7 +654,7 @@ ns.Vendors = {
             { id = 248939, price = 1000000 },
             { id = 253168, price = 200000 },
             { id = 256673, price = 10000000 },
-            { id = 284223, price = 2000000 },
+            { id = 284223, price = 2500000 },
         },
     },
     [50304] = {
@@ -704,7 +706,7 @@ ns.Vendors = {
         zone = "Orgrimmar",
         faction = "Horde",
         items = {
-            { id = 253168, price = 190000 },
+            { id = 253168, price = 200000 },
         },
     },
     [58414] = {
@@ -836,11 +838,11 @@ ns.Vendors = {
         areaID = 7490,
         faction = "Horde",
         items = {
-            { id = 244315, currencies = { { id = 824, amount = 1500 } } },
+            { id = 244315, currencies = { { id = 824, amount = 300 } } },
             { id = 244316, price = 2000000, currencies = { { id = 824, amount = 300 } } },
             { id = 244320, price = 500000, currencies = { { id = 824, amount = 100 } } },
             { id = 244653, price = 2000000, currencies = { { id = 824, amount = 300 } } },
-            { id = 245438, price = 2700000, currencies = { { id = 824, amount = 500 } } },
+            { id = 245438, price = 3000000, currencies = { { id = 824, amount = 250 } } },
             { id = 245443, price = 2000000, currencies = { { id = 824, amount = 300 } } },
         },
     },
@@ -860,7 +862,7 @@ ns.Vendors = {
         areaID = 6923,
         faction = "Alliance",
         items = {
-            { id = 257349, price = 2000000, currencies = { { id = 824, amount = 300 } } },
+            { id = 257349, price = 2000000, currencies = { { id = 824, amount = 150 } } },
         },
     },
     [85427] = {
@@ -868,8 +870,8 @@ ns.Vendors = {
         zone = "Lunarfall (Alliance Garrison)",
         faction = "Alliance",
         items = {
-            { id = 245424, price = 5000000, currencies = { { id = 823, amount = 1000 } } },
-            { id = 251544, price = 5000000, currencies = { { id = 823, amount = 1000 } } },
+            { id = 245424, price = 5000000, currencies = { { id = 823, amount = 350 } } },
+            { id = 251544, price = 5000000, currencies = { { id = 823, amount = 350 } } },
         },
     },
     [85932] = {
@@ -897,9 +899,9 @@ ns.Vendors = {
         areaID = 7229,
         faction = "Alliance",
         items = {
-            { id = 258743, price = 3200000, currencies = { { id = 823, amount = 350 } } },
-            { id = 258746, price = 6000000, currencies = { { id = 823, amount = 450 } } },
-            { id = 258747, price = 2800000, currencies = { { id = 823, amount = 300 } } },
+            { id = 258743, price = 4000000, currencies = { { id = 823, amount = 350 } } },
+            { id = 258746, price = 7500000, currencies = { { id = 823, amount = 450 } } },
+            { id = 258747, price = 3500000, currencies = { { id = 823, amount = 300 } } },
         },
     },
     [85950] = {
@@ -923,9 +925,9 @@ ns.Vendors = {
         zone = "Warspear",
         faction = "Horde",
         items = {
-            { id = 258743, price = 4000000, currencies = { { id = 823, amount = 800 } } },
-            { id = 258746, price = 7500000, currencies = { { id = 823, amount = 1500 } } },
-            { id = 258747, price = 3500000, currencies = { { id = 823, amount = 700 } } },
+            { id = 258743, price = 4000000, currencies = { { id = 823, amount = 350 } } },
+            { id = 258746, price = 7500000, currencies = { { id = 823, amount = 450 } } },
+            { id = 258747, price = 3500000, currencies = { { id = 823, amount = 300 } } },
         },
     },
     [86776] = {
@@ -936,7 +938,7 @@ ns.Vendors = {
         items = {
             { id = 244321, currencies = { { id = 824, amount = 100 } } },
             { id = 244322, currencies = { { id = 824, amount = 100 } } },
-            { id = 245444, currencies = { { id = 824, amount = 250 } } },
+            { id = 245444, currencies = { { id = 824, amount = 150 } } },
             { id = 245445, currencies = { { id = 824, amount = 150 } } },
         },
     },
@@ -949,7 +951,7 @@ ns.Vendors = {
         items = {
             { id = 244321, currencies = { { id = 824, amount = 100 } } },
             { id = 244322, currencies = { { id = 824, amount = 100 } } },
-            { id = 245444, currencies = { { id = 824, amount = 250 } } },
+            { id = 245444, currencies = { { id = 824, amount = 150 } } },
             { id = 245445, currencies = { { id = 824, amount = 150 } } },
         },
     },
@@ -961,7 +963,7 @@ ns.Vendors = {
         items = {
             { id = 244321, currencies = { { id = 824, amount = 100 } } },
             { id = 244322, currencies = { { id = 824, amount = 100 } } },
-            { id = 245444, currencies = { { id = 824, amount = 250 } } },
+            { id = 245444, currencies = { { id = 824, amount = 150 } } },
             { id = 245445, currencies = { { id = 824, amount = 150 } } },
         },
     },
@@ -972,8 +974,8 @@ ns.Vendors = {
         areaID = 7490,
         faction = "Horde",
         items = {
-            { id = 245431, price = 5000000, currencies = { { id = 823, amount = 1000 } } },
-            { id = 245433, price = 5000000, currencies = { { id = 823, amount = 1000 } } },
+            { id = 245431, price = 5000000, currencies = { { id = 823, amount = 350 } } },
+            { id = 245433, price = 5000000, currencies = { { id = 823, amount = 350 } } },
         },
     },
     [87200] = {
@@ -984,7 +986,7 @@ ns.Vendors = {
         items = {
             { id = 244321, currencies = { { id = 824, amount = 100 } } },
             { id = 244322, currencies = { { id = 824, amount = 100 } } },
-            { id = 245444, currencies = { { id = 824, amount = 250 } } },
+            { id = 245444, currencies = { { id = 824, amount = 150 } } },
             { id = 245445, currencies = { { id = 824, amount = 150 } } },
         },
     },
@@ -1001,11 +1003,11 @@ ns.Vendors = {
         name = "Ruuan the Seer",
         zone = "Spires of Arak",
         items = {
-            { id = 258740, price = 4500000, currencies = { { id = 823, amount = 1000 } } },
-            { id = 258741, price = 3600000, currencies = { { id = 823, amount = 800 } } },
-            { id = 258745, price = 6750000, currencies = { { id = 823, amount = 1500 } } },
-            { id = 258748, price = 9000000, currencies = { { id = 823, amount = 2000 } } },
-            { id = 258749, price = 5400000, currencies = { { id = 823, amount = 1200 } } },
+            { id = 258740, price = 4000000, currencies = { { id = 823, amount = 350 } } },
+            { id = 258741, price = 4000000, currencies = { { id = 823, amount = 350 } } },
+            { id = 258745, price = 7500000, currencies = { { id = 823, amount = 450 } } },
+            { id = 258748, price = 10000000, currencies = { { id = 823, amount = 500 } } },
+            { id = 258749, price = 6000000, currencies = { { id = 823, amount = 400 } } },
         },
     },
     [88126] = {
@@ -1013,7 +1015,7 @@ ns.Vendors = {
         zone = "Lunarfall (Alliance Garrison)",
         faction = "Alliance",
         items = {
-            { id = 253527, price = 3000000, currencies = { { id = 824, amount = 500 } } },
+            { id = 253527, price = 3000000, currencies = { { id = 824, amount = 250 } } },
         },
     },
     [88220] = {
@@ -1162,8 +1164,8 @@ ns.Vendors = {
             { id = 245270, price = 7000000, currencies = { { id = 1220, amount = 300 } } },
             { id = 245450, price = 10000000, currencies = { { id = 1220, amount = 500 } } },
             { id = 245452, price = 5000000, currencies = { { id = 1220, amount = 250 } } },
-            { id = 245454, price = 2400000, currencies = { { id = 1220, amount = 200 } } },
-            { id = 245458, price = 2400000, currencies = { { id = 1220, amount = 200 } } },
+            { id = 245454, price = 3000000, currencies = { { id = 1220, amount = 200 } } },
+            { id = 245458, price = 3000000, currencies = { { id = 1220, amount = 200 } } },
             { id = 248985, price = 5000000, currencies = { { id = 1220, amount = 250 } } },
         },
     },
@@ -1172,18 +1174,18 @@ ns.Vendors = {
         zone = "Highmountain",
         subzone = "Thunder Totem Basement",
         items = {
-            { id = 245405, price = 2400000, currencies = { { id = 1220, amount = 200 } } },
-            { id = 245409, price = 2400000, currencies = { { id = 1220, amount = 200 } } },
-            { id = 245453, price = 2400000, currencies = { { id = 1220, amount = 200 } } },
+            { id = 245405, price = 3000000, currencies = { { id = 1220, amount = 200 } } },
+            { id = 245409, price = 3000000, currencies = { { id = 1220, amount = 200 } } },
+            { id = 245453, price = 3000000, currencies = { { id = 1220, amount = 200 } } },
             { id = 245456, price = 5000000, currencies = { { id = 1220, amount = 250 } } },
-            { id = 245457, price = 2400000, currencies = { { id = 1220, amount = 200 } } },
+            { id = 245457, price = 3000000, currencies = { { id = 1220, amount = 200 } } },
             { id = 245460, price = 5000000, currencies = { { id = 1220, amount = 250 } } },
             { id = 245461, price = 7000000, currencies = { { id = 1220, amount = 300 } } },
-            { id = 256913, price = 2400000, currencies = { { id = 1220, amount = 200 } } },
+            { id = 256913, price = 3000000, currencies = { { id = 1220, amount = 200 } } },
             { id = 257397, price = 5000000, currencies = { { id = 1220, amount = 250 } } },
             { id = 257401, price = 7000000, currencies = { { id = 1220, amount = 300 } } },
-            { id = 257721, price = 2400000, currencies = { { id = 1220, amount = 200 } } },
-            { id = 257722, price = 2400000, currencies = { { id = 1220, amount = 200 } } },
+            { id = 257721, price = 3000000, currencies = { { id = 1220, amount = 200 } } },
+            { id = 257722, price = 3000000, currencies = { { id = 1220, amount = 200 } } },
             { id = 257723, price = 5000000, currencies = { { id = 1220, amount = 250 } } },
             { id = 260698, price = 1000000, currencies = { { id = 1220, amount = 150 } } },
             { id = 264477, price = 4000000, currencies = { { id = 1220, amount = 250 } } },
@@ -1195,9 +1197,9 @@ ns.Vendors = {
         subzone = "Shipwreck Cove",
         areaID = 7883,
         items = {
-            { id = 258219, currencies = { { id = 1220, amount = 175 } } },
-            { id = 258221, currencies = { { id = 1220, amount = 450 } } },
-            { id = 258223, currencies = { { id = 1220, amount = 400 } } },
+            { id = 258219, currencies = { { id = 1220, amount = 150 } } },
+            { id = 258221, currencies = { { id = 1220, amount = 200 } } },
+            { id = 258223, currencies = { { id = 1220, amount = 200 } } },
         },
     },
     [109306] = {
@@ -1397,9 +1399,9 @@ ns.Vendors = {
         faction = "Horde",
         items = {
             { id = 245413, currencies = { { id = 1560, amount = 150 } } },
-            { id = 245488, currencies = { { id = 1560, amount = 500 } } },
-            { id = 245495, currencies = { { id = 1560, amount = 400 } } },
-            { id = 245500, currencies = { { id = 1560, amount = 400 } } },
+            { id = 245488, currencies = { { id = 1560, amount = 200 } } },
+            { id = 245495, currencies = { { id = 1560, amount = 200 } } },
+            { id = 245500, currencies = { { id = 1560, amount = 200 } } },
             { id = 257394, currencies = { { id = 1560, amount = 150 } } },
         },
     },
@@ -1428,10 +1430,19 @@ ns.Vendors = {
         faction = "Alliance",
         items = {
             { id = 246222, currencies = { { id = 1560, amount = 75 } } },
-            { id = 252036, currencies = { { id = 1560, amount = 500 } } },
+            { id = 252036, currencies = { { id = 1560, amount = 200 } } },
             { id = 252387, currencies = { { id = 1560, amount = 100 } } },
             { id = 252388, currencies = { { id = 1560, amount = 50 } } },
-            { id = 252402, currencies = { { id = 1560, amount = 450 } } },
+            { id = 252402, currencies = { { id = 1560, amount = 200 } } },
+        },
+    },
+    [143244] = {
+        name = "Victor Esquivias",
+        zone = "Boralus",
+        subzone = "Snug Harbor Inn",
+        faction = "Alliance",
+        items = {
+            { id = 284384, currencies = { { id = 1560, amount = 150 } } },
         },
     },
     [143325] = {
@@ -1494,13 +1505,13 @@ ns.Vendors = {
         areaID = 8666,
         faction = "Horde",
         items = {
-            { id = 241067, currencies = { { id = 1560, amount = 200 } } },
-            { id = 245464, currencies = { { id = 1560, amount = 200 } } },
+            { id = 241067, currencies = { { id = 1560, amount = 150 } } },
+            { id = 245464, currencies = { { id = 1560, amount = 150 } } },
             { id = 245471, currencies = { { id = 1560, amount = 150 } } },
             { id = 245472, currencies = { { id = 1560, amount = 150 } } },
-            { id = 245474, currencies = { { id = 1560, amount = 300 } } },
-            { id = 245476, currencies = { { id = 1560, amount = 300 } } },
-            { id = 245477, currencies = { { id = 1560, amount = 200 } } },
+            { id = 245474, currencies = { { id = 1560, amount = 150 } } },
+            { id = 245476, currencies = { { id = 1560, amount = 150 } } },
+            { id = 245477, currencies = { { id = 1560, amount = 150 } } },
         },
     },
     [150716] = {
@@ -1510,20 +1521,20 @@ ns.Vendors = {
         areaID = 10418,
         items = {
             { id = 246479, items = { { id = 166846, amount = 100 } } },
-            { id = 246480, price = 8000000, items = { { id = 168327, amount = 5 }, { id = 168832, amount = 5 } } },
-            { id = 246483, price = 4000000, items = { { id = 166970, amount = 2 }, { id = 168327, amount = 1 } } },
-            { id = 246484, price = 800000, items = { { id = 166970, amount = 1 } } },
-            { id = 246497, price = 800000, items = { { id = 166970, amount = 1 } } },
-            { id = 246498, price = 800000, items = { { id = 166970, amount = 1 } } },
-            { id = 246499, price = 1200000, items = { { id = 166970, amount = 2 } } },
-            { id = 246501, price = 1600000, items = { { id = 168832, amount = 2 } } },
-            { id = 246503, price = 800000, items = { { id = 169610, amount = 2 } } },
+            { id = 246480, price = 10000000, items = { { id = 168327, amount = 2 }, { id = 168832, amount = 2 } } },
+            { id = 246483, price = 5000000, items = { { id = 166970, amount = 1 }, { id = 168327, amount = 1 } } },
+            { id = 246484, price = 1000000, items = { { id = 166970, amount = 1 } } },
+            { id = 246497, price = 1000000, items = { { id = 166970, amount = 1 } } },
+            { id = 246498, price = 1000000, items = { { id = 166970, amount = 1 } } },
+            { id = 246499, price = 1500000, items = { { id = 166970, amount = 1 } } },
+            { id = 246501, price = 2000000, items = { { id = 168832, amount = 1 } } },
+            { id = 246503, price = 1000000, items = { { id = 169610, amount = 1 } } },
             { id = 246598, items = { { id = 169610, amount = 1 } } },
             { id = 246601, items = { { id = 166846, amount = 10 } } },
             { id = 246603, items = { { id = 166846, amount = 50 } } },
-            { id = 246605, price = 1200000, items = { { id = 168327, amount = 2 } } },
-            { id = 246701, price = 1600000, items = { { id = 169610, amount = 2 } } },
-            { id = 246703, price = 2400000, items = { { id = 169610, amount = 3 } } },
+            { id = 246605, price = 1500000, items = { { id = 168327, amount = 1 } } },
+            { id = 246701, price = 2000000, items = { { id = 169610, amount = 1 } } },
+            { id = 246703, price = 3000000, items = { { id = 169610, amount = 2 } } },
         },
     },
     [152194] = {
@@ -1628,12 +1639,19 @@ ns.Vendors = {
         subzone = "Dragonscale Basecamp",
         areaID = 13732,
         items = {
-            { id = 238975, currencies = { { id = 2003, amount = 750 } } },
-            { id = 245283, currencies = { { id = 2003, amount = 400 } } },
+            { id = 238975, currencies = { { id = 2003, amount = 500 } } },
+            { id = 245283, currencies = { { id = 2003, amount = 200 } } },
             { id = 245285, currencies = { { id = 2003, amount = 100 } } },
-            { id = 245286, currencies = { { id = 2003, amount = 250 } } },
-            { id = 245287, currencies = { { id = 2003, amount = 250 } } },
-            { id = 245288, currencies = { { id = 2003, amount = 250 } } },
+            { id = 245286, currencies = { { id = 2003, amount = 150 } } },
+            { id = 245287, currencies = { { id = 2003, amount = 150 } } },
+            { id = 245288, currencies = { { id = 2003, amount = 150 } } },
+        },
+    },
+    [188623] = {
+        name = "Samia Inkling",
+        zone = "The Waking Shores",
+        items = {
+            { id = 284579, currencies = { { id = 2003, amount = 500 } } },
         },
     },
     [189226] = {
@@ -1642,12 +1660,12 @@ ns.Vendors = {
         subzone = "Dragonscale Basecamp",
         areaID = 13732,
         items = {
-            { id = 238975, currencies = { { id = 2003, amount = 750 } } },
-            { id = 245283, currencies = { { id = 2003, amount = 400 } } },
+            { id = 238975, currencies = { { id = 2003, amount = 500 } } },
+            { id = 245283, currencies = { { id = 2003, amount = 200 } } },
             { id = 245285, currencies = { { id = 2003, amount = 100 } } },
-            { id = 245286, currencies = { { id = 2003, amount = 250 } } },
-            { id = 245287, currencies = { { id = 2003, amount = 250 } } },
-            { id = 245288, currencies = { { id = 2003, amount = 250 } } },
+            { id = 245286, currencies = { { id = 2003, amount = 150 } } },
+            { id = 245287, currencies = { { id = 2003, amount = 150 } } },
+            { id = 245288, currencies = { { id = 2003, amount = 150 } } },
         },
     },
     [191025] = {
@@ -1656,7 +1674,7 @@ ns.Vendors = {
         subzone = "Ruby Lifeshrine",
         areaID = 13727,
         items = {
-            { id = 246863, currencies = { { id = 2003, amount = 500 } } },
+            { id = 246863, currencies = { { id = 2003, amount = 250 } } },
         },
     },
     [193015] = {
@@ -1665,11 +1683,11 @@ ns.Vendors = {
         subzone = "The Seat of the Aspects",
         areaID = 14489,
         items = {
-            { id = 248103, currencies = { { id = 2003, amount = 300 } } },
-            { id = 248112, currencies = { { id = 2003, amount = 400 } } },
-            { id = 248652, currencies = { { id = 2003, amount = 250 } } },
+            { id = 248103, currencies = { { id = 2003, amount = 150 } } },
+            { id = 248112, currencies = { { id = 2003, amount = 250 } } },
+            { id = 248652, currencies = { { id = 2003, amount = 150 } } },
             { id = 256168, currencies = { { id = 2003, amount = 10 } } },
-            { id = 256169, currencies = { { id = 2003, amount = 500 } } },
+            { id = 256169, currencies = { { id = 2003, amount = 250 } } },
         },
     },
     [193659] = {
@@ -1678,7 +1696,7 @@ ns.Vendors = {
         subzone = "The Obsidian Enclave",
         areaID = 14506,
         items = {
-            { id = 250912, currencies = { { id = 2003, amount = 600 } } },
+            { id = 250912, currencies = { { id = 2003, amount = 250 } } },
         },
     },
     [196637] = {
@@ -1750,7 +1768,6 @@ ns.Vendors = {
         items = {
             { id = 246091, currencies = { { id = 2003, amount = 300 } } },
             { id = 248759, currencies = { { id = 2003, amount = 150 } } },
-            { id = 256429, price = 100000, currencies = { { id = 2003, amount = 200 } } },
         },
     },
     [216285] = {
@@ -1796,7 +1813,7 @@ ns.Vendors = {
         subzone = "Mereldar",
         areaID = 14917,
         items = {
-            { id = 260583, currencies = { { id = 2815, amount = 500 } } },
+            { id = 260583, currencies = { { id = 2815, amount = 250 } } },
         },
     },
     [218202] = {
@@ -1890,8 +1907,8 @@ ns.Vendors = {
         subzone = "The Scrapshop",
         areaID = 15457,
         items = {
-            { id = 245313, currencies = { { id = 2815, amount = 450 } } },
-            { id = 255674, currencies = { { id = 2815, amount = 450 } } },
+            { id = 245313, currencies = { { id = 2815, amount = 250 } } },
+            { id = 255674, currencies = { { id = 2815, amount = 250 } } },
         },
     },
     [231407] = {
@@ -2238,9 +2255,6 @@ ns.Vendors = {
         subzone = "The Den",
         areaID = 15921,
         items = {
-            { id = 265943, currencies = { { id = 3385, amount = 10 } } },
-            { id = 265945, currencies = { { id = 3385, amount = 10 } } },
-            { id = 265946, currencies = { { id = 3385, amount = 10 } } },
             { id = 263038, currencies = { { id = 3316, amount = 500 } } },
             { id = 264243, currencies = { { id = 3316, amount = 150 } } },
             { id = 264245, currencies = { { id = 3316, amount = 150 } } },
@@ -2274,21 +2288,21 @@ ns.Vendors = {
         areaID = 8665,
         faction = "Horde",
         items = {
-            { id = 239606, currencies = { { id = 1560, amount = 200 } } },
-            { id = 241062, currencies = { { id = 1560, amount = 200 } } },
+            { id = 239606, currencies = { { id = 1560, amount = 150 } } },
+            { id = 241062, currencies = { { id = 1560, amount = 150 } } },
             { id = 245463, currencies = { { id = 1560, amount = 150 } } },
-            { id = 245465, currencies = { { id = 1560, amount = 200 } } },
-            { id = 245466, currencies = { { id = 1560, amount = 200 } } },
+            { id = 245465, currencies = { { id = 1560, amount = 150 } } },
+            { id = 245466, currencies = { { id = 1560, amount = 150 } } },
             { id = 245467, currencies = { { id = 1560, amount = 150 } } },
-            { id = 245469, currencies = { { id = 1560, amount = 300 } } },
-            { id = 245470, currencies = { { id = 1560, amount = 300 } } },
-            { id = 245473, currencies = { { id = 1560, amount = 300 } } },
-            { id = 245475, currencies = { { id = 1560, amount = 300 } } },
-            { id = 245478, currencies = { { id = 1560, amount = 200 } } },
-            { id = 245479, currencies = { { id = 1560, amount = 300 } } },
-            { id = 245480, currencies = { { id = 1560, amount = 200 } } },
-            { id = 245481, currencies = { { id = 1560, amount = 300 } } },
-            { id = 245483, currencies = { { id = 1560, amount = 200 } } },
+            { id = 245469, currencies = { { id = 1560, amount = 150 } } },
+            { id = 245470, currencies = { { id = 1560, amount = 150 } } },
+            { id = 245473, currencies = { { id = 1560, amount = 150 } } },
+            { id = 245475, currencies = { { id = 1560, amount = 150 } } },
+            { id = 245478, currencies = { { id = 1560, amount = 150 } } },
+            { id = 245479, currencies = { { id = 1560, amount = 150 } } },
+            { id = 245480, currencies = { { id = 1560, amount = 150 } } },
+            { id = 245481, currencies = { { id = 1560, amount = 150 } } },
+            { id = 245483, currencies = { { id = 1560, amount = 150 } } },
         },
     },
     [252043] = {
@@ -2430,7 +2444,6 @@ ns.Vendors = {
             { id = 253700, currencies = { { id = 3316, amount = 250 } } },
             { id = 269316, price = 100000 },
             { id = 278038, currencies = { { id = 3316, amount = 150 } } },
-            { id = 278044, currencies = { { id = 3316, amount = 150 } } },
             { id = 278694, currencies = { { id = 3316, amount = 250 } } },
         },
     },
@@ -2531,16 +2544,16 @@ ns.Vendors = {
         areaID = 14502,
         items = {
             { id = 246706, currencies = { { id = 2003, amount = 100 } } },
-            { id = 247223, currencies = { { id = 2003, amount = 175 } } },
-            { id = 248103, currencies = { { id = 2003, amount = 300 } } },
+            { id = 247223, currencies = { { id = 2003, amount = 150 } } },
+            { id = 248103, currencies = { { id = 2003, amount = 150 } } },
             { id = 248104, currencies = { { id = 2003, amount = 150 } } },
-            { id = 248112, currencies = { { id = 2003, amount = 400 } } },
-            { id = 248651, currencies = { { id = 2003, amount = 600 } } },
-            { id = 248652, currencies = { { id = 2003, amount = 250 } } },
+            { id = 248112, currencies = { { id = 2003, amount = 250 } } },
+            { id = 248651, currencies = { { id = 2003, amount = 250 } } },
+            { id = 248652, currencies = { { id = 2003, amount = 150 } } },
             { id = 248653, currencies = { { id = 2003, amount = 50 } } },
-            { id = 248655, currencies = { { id = 2003, amount = 200 } } },
-            { id = 256169, currencies = { { id = 2003, amount = 500 } } },
-            { id = 256429, currencies = { { id = 2003, amount = 200 } } },
+            { id = 248655, currencies = { { id = 2003, amount = 150 } } },
+            { id = 256169, currencies = { { id = 2003, amount = 250 } } },
+            { id = 256429, currencies = { { id = 2003, amount = 150 } } },
         },
     },
     [253086] = {
@@ -2548,8 +2561,6 @@ ns.Vendors = {
         zone = "Forbidden Reach",
         items = {
             { id = 248656, currencies = { { id = 2118, amount = 500 } } },
-            { id = 256168, currencies = { { id = 2003, amount = 10 } } },
-            { id = 256169, price = 100000, currencies = { { id = 2003, amount = 500 } } },
         },
     },
     [253227] = {
@@ -2611,7 +2622,7 @@ ns.Vendors = {
         subzone = "Irongrove Retreat",
         areaID = 8230,
         items = {
-            { id = 245701, currencies = { { id = 1220, amount = 175 } } },
+            { id = 245701, currencies = { { id = 1220, amount = 150 } } },
         },
     },
     [253596] = {
@@ -2620,6 +2631,26 @@ ns.Vendors = {
         faction = "Horde",
         items = {
             { id = 262453, currencies = { { id = 3363, amount = 30 } } },
+            { id = 244347, items = { { id = 274481, amount = 100 } } },
+            { id = 245991, items = { { id = 274481, amount = 100 } } },
+            { id = 245993, items = { { id = 274481, amount = 100 } } },
+            { id = 252042, items = { { id = 274481, amount = 100 } } },
+            { id = 253396, items = { { id = 274481, amount = 100 } } },
+            { id = 253703, items = { { id = 274481, amount = 100 } } },
+            { id = 255652, items = { { id = 274481, amount = 100 } } },
+            { id = 255712, items = { { id = 274481, amount = 100 } } },
+            { id = 256361, items = { { id = 274481, amount = 100 } } },
+            { id = 256684, items = { { id = 274481, amount = 100 } } },
+            { id = 258540, items = { { id = 274481, amount = 100 } } },
+            { id = 263876, items = { { id = 274481, amount = 100 } } },
+            { id = 267205, items = { { id = 274481, amount = 100 } } },
+            { id = 267355, items = { { id = 274481, amount = 100 } } },
+            { id = 267435, items = { { id = 274481, amount = 100 } } },
+            { id = 268943, items = { { id = 274481, amount = 100 } } },
+            { id = 272129, items = { { id = 274481, amount = 100 } } },
+            { id = 272142, items = { { id = 274481, amount = 100 } } },
+            { id = 278696, items = { { id = 274481, amount = 100 } } },
+            { id = 278701, items = { { id = 274481, amount = 100 } } },
         },
     },
     [254603] = {
@@ -2658,9 +2689,9 @@ ns.Vendors = {
         items = {
             { id = 247762, currencies = { { id = 1792, amount = 150 } } },
             { id = 247761, currencies = { { id = 1792, amount = 200 } } },
-            { id = 256896, currencies = { { id = 1792, amount = 450 } } },
+            { id = 256896, currencies = { { id = 1792, amount = 250 } } },
             { id = 247759, currencies = { { id = 1792, amount = 600 } } },
-            { id = 253170, currencies = { { id = 1792, amount = 750 } } },
+            { id = 253170, currencies = { { id = 1792, amount = 350 } } },
             { id = 247747, currencies = { { id = 1792, amount = 400 } } },
             { id = 247745, currencies = { { id = 1792, amount = 500 } } },
             { id = 247756, currencies = { { id = 1792, amount = 500 } } },
@@ -2708,6 +2739,8 @@ ns.Vendors = {
             { id = 264480, currencies = { { id = 3316, amount = 250 } } },
             { id = 264481, currencies = { { id = 3316, amount = 250 } } },
             { id = 264715, currencies = { { id = 3316, amount = 250 } } },
+            { id = 264718, currencies = { { id = 3316, amount = 250 } } },
+            { id = 279067, currencies = { { id = 3316, amount = 500 } } },
             { id = 278691, currencies = { { id = 3316, amount = 250 } } },
         },
     },
@@ -2716,7 +2749,7 @@ ns.Vendors = {
         zone = "Suramar",
         items = {
             { id = 257393, currencies = { { id = 1155, amount = 50 } } },
-            { id = 257598, price = 100000, currencies = { { id = 1155, amount = 125 } } },
+            { id = 257598, currencies = { { id = 1155, amount = 125 } } },
         },
     },
     [255114] = {
@@ -3048,7 +3081,7 @@ ns.Vendors = {
             { id = 244661, price = 500000 },
             { id = 244662, price = 500000 },
             { id = 244663, price = 500000 },
-            { id = 244778, price = 2500000 },
+            { id = 244778, price = 200 },
             { id = 245264, price = 100000 },
             { id = 245265, price = 100000 },
             { id = 245266, price = 500000 },
@@ -3550,7 +3583,7 @@ ns.Vendors = {
             { id = 244664, price = 500000 },
             { id = 244665, price = 500000 },
             { id = 244666, price = 500000 },
-            { id = 244778, price = 2500000 },
+            { id = 244778, price = 200 },
             { id = 245267, price = 100000 },
             { id = 245268, price = 100000 },
             { id = 245334, price = 100000 },
@@ -3764,23 +3797,6 @@ ns.Vendors = {
             { id = 258267, currencies = { { id = 2815, amount = 350 } } },
         },
     },
-    [256784] = {
-        name = "Dyezertauren",
-        zone = "Razorwind Shores",
-        faction = "Horde",
-        items = {
-            { id = 274464, price = 10 },
-            { id = 274468, price = 10 },
-            { id = 274469, price = 10 },
-            { id = 274470, price = 10 },
-            { id = 274471, price = 10 },
-            { id = 274472, price = 10 },
-            { id = 274473, price = 10 },
-            { id = 274474, price = 10 },
-            { id = 274475, price = 10 },
-            { id = 281540, price = 1 },
-        },
-    },
     [256826] = {
         name = "Mrgrgrl",
         zone = "Suramar",
@@ -3829,7 +3845,7 @@ ns.Vendors = {
         zone = "Talador",
         subzone = "Refuge",
         items = {
-            { id = 258742, price = 3000000, currencies = { { id = 823, amount = 600 } } },
+            { id = 258742, price = 3000000, currencies = { { id = 823, amount = 300 } } },
         },
     },
     [257257] = {
@@ -4202,13 +4218,13 @@ ns.Vendors = {
         name = "Estelia Archtender",
         zone = "Silvermoon City",
         items = {
-            { id = 275865, currencies = { { id = 3316, amount = 500 } } },
-            { id = 275867, currencies = { { id = 3316, amount = 350 } } },
-            { id = 275869, currencies = { { id = 3316, amount = 350 } } },
-            { id = 275871, currencies = { { id = 3316, amount = 500 } } },
-            { id = 275873, currencies = { { id = 3316, amount = 350 } } },
-            { id = 275879, currencies = { { id = 3316, amount = 350 } } },
-            { id = 280050, currencies = { { id = 3316, amount = 1500 } } },
+            { id = 275865, currencies = { { id = 3316, amount = 350 } } },
+            { id = 275867, currencies = { { id = 3316, amount = 250 } } },
+            { id = 275869, currencies = { { id = 3316, amount = 250 } } },
+            { id = 275871, currencies = { { id = 3316, amount = 350 } } },
+            { id = 275873, currencies = { { id = 3316, amount = 250 } } },
+            { id = 275879, currencies = { { id = 3316, amount = 250 } } },
+            { id = 280050, currencies = { { id = 3316, amount = 1000 } } },
         },
     },
     [267794] = {
@@ -4579,6 +4595,27 @@ ns.Vendors = {
             { id = 263234, currencies = { { id = 3316, amount = 500 } } },
             { id = 264264, currencies = { { id = 3316, amount = 250 } } },
             { id = 264265, currencies = { { id = 3316, amount = 250 } } },
+        },
+    },
+    [276366] = {
+        name = "Amani Representative",
+        zone = "Silvermoon City",
+        items = {
+            { id = 256924, currencies = { { id = 3316, amount = 250 } } },
+            { id = 256926, currencies = { { id = 3316, amount = 250 } } },
+            { id = 256927, currencies = { { id = 3316, amount = 250 } } },
+            { id = 256933, currencies = { { id = 3316, amount = 250 } } },
+            { id = 256934, currencies = { { id = 3316, amount = 250 } } },
+            { id = 258290, currencies = { { id = 3316, amount = 250 } } },
+            { id = 258549, currencies = { { id = 3316, amount = 250 } } },
+            { id = 260202, currencies = { { id = 3316, amount = 500 } } },
+            { id = 260514, currencies = { { id = 3316, amount = 500 } } },
+            { id = 260515, currencies = { { id = 3316, amount = 500 } } },
+            { id = 260516, currencies = { { id = 3316, amount = 500 } } },
+            { id = 263318, currencies = { { id = 3316, amount = 150 } } },
+            { id = 263320, currencies = { { id = 3316, amount = 150 } } },
+            { id = 264333, currencies = { { id = 3316, amount = 150 } } },
+            { id = 264350, currencies = { { id = 3316, amount = 250 } } },
         },
     },
 }
@@ -5014,8 +5051,16 @@ ns.TimedVendors = {
 
 ns.EndeavorThemes = {
     ids = {
+        [12] = "Kobold",
+        [13] = "Grummle",
         [15] = "Blood Elf",
+        [16] = "Dracthyr",
         [17] = "Mechagnome",
+        [18] = "K'areshi",
+        [19] = "Niffen",
+        [20] = "Maruuk",
+        [22] = "Amani",
+        [24] = "Tortollan",
     },
     titles = {
         ["Artistic Aid"] = "Blood Elf",

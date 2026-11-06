@@ -111,7 +111,7 @@ ns.Nodes = {
         [57206100] = 59698,
     },
     [390] = {
-        [62802320] = 62032,
+        [62802320] = 64001,
         [82202940] = 64605,
         [82803080] = 62088,
         [84606340] = 64032,
@@ -232,7 +232,7 @@ ns.Nodes = {
     [831] = {
         [33016546] = 127518,
         [43437439] = 127120,
-        [68205690] = 125346,
+        [68205690] = 127151,
     },
     [862] = {
         [58006260] = 251921,
@@ -741,15 +741,6 @@ ns.Vendors = {
             { id = 264349, price = 10000000 },
         },
     },
-    [62032] = {
-        name = "Sage Lotusbloom",
-        zone = "Shrine of Two Moons",
-        faction = "Horde",
-        items = {
-            { id = 247729, price = 3000000 },
-            { id = 264362, price = 5000000 },
-        },
-    },
     [62088] = {
         name = "Lali the Assistant",
         zone = "Vale of Eternal Blossoms",
@@ -761,6 +752,15 @@ ns.Vendors = {
             { id = 257354, price = 20000000 },
             { id = 257355, price = 20000000 },
             { id = 271971, price = 20000000 },
+        },
+    },
+    [64001] = {
+        name = "Sage Lotusbloom",
+        zone = "Shrine of Two Moons",
+        faction = "Horde",
+        items = {
+            { id = 247729, price = 3000000 },
+            { id = 264362, price = 5000000 },
         },
     },
     [64032] = {
@@ -1348,16 +1348,6 @@ ns.Vendors = {
             { id = 256331, price = 4500000 },
         },
     },
-    [125346] = {
-        name = "Toraan the Revered",
-        zone = "The Vindicaar",
-        subzone = "The Vindicaar",
-        areaID = 8714,
-        items = {
-            { id = 245422, price = 8000000 },
-            { id = 251480, price = 3000000 },
-        },
-    },
     [127120] = {
         name = "Vindicator Jaelaana",
         zone = "The Vindicaar",
@@ -1370,6 +1360,16 @@ ns.Vendors = {
             { id = 282142, price = 5000000, currencies = { { id = 1220, amount = 250 } } },
             { id = 282146, price = 7000000, currencies = { { id = 1220, amount = 300 } } },
             { id = 282156, price = 3000000, currencies = { { id = 1220, amount = 200 } } },
+        },
+    },
+    [127151] = {
+        name = "Toraan the Revered",
+        zone = "The Vindicaar",
+        subzone = "The Vindicaar",
+        areaID = 8714,
+        items = {
+            { id = 245422, price = 8000000 },
+            { id = 251480, price = 3000000 },
         },
     },
     [127518] = {

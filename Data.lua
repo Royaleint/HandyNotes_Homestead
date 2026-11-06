@@ -489,8 +489,8 @@ ns.Vendors = {
     [2140] = {
         name = "Edwin Harly",
         zone = "Silverpine Forest",
-        subzone = "Pyrewood Village",
-        areaID = 204,
+        subzone = "The Sepulcher",
+        areaID = 228,
         faction = "Horde",
         items = {
             { id = 257412, price = 1500000 },
@@ -775,8 +775,8 @@ ns.Vendors = {
     [64605] = {
         name = "Tan Shin Tiao",
         zone = "Vale of Eternal Blossoms",
-        subzone = "Mogushan Palace",
-        areaID = 6143,
+        subzone = "Seat of Knowledge",
+        areaID = 6295,
         items = {
             { id = 245512, price = 3000000 },
             { id = 247662, price = 5000000 },
@@ -1036,8 +1036,8 @@ ns.Vendors = {
     [93550] = {
         name = "Quartermaster Ozorg",
         zone = "Broken Shore",
-        subzone = "Acherus: The Ebon Hold (DK Order Hall)",
-        areaID = 4281,
+        subzone = "The Heart of Acherus",
+        areaID = 7679,
         items = {
             { id = 250112, currencies = { { id = 1220, amount = 350 } } },
             { id = 250113, currencies = { { id = 1220, amount = 150 } } },
@@ -1501,8 +1501,8 @@ ns.Vendors = {
     [148924] = {
         name = "Provisioner Mukra",
         zone = "Dazar'alor",
-        subzone = "Grand Bazaar",
-        areaID = 8666,
+        subzone = "Port of Zandalar",
+        areaID = 8665,
         faction = "Horde",
         items = {
             { id = 241067, currencies = { { id = 1560, amount = 150 } } },
@@ -1894,8 +1894,8 @@ ns.Vendors = {
     [231405] = {
         name = "Boatswain Hardee",
         zone = "Undermine",
-        subzone = "Blackwater Marina",
-        areaID = 15461,
+        subzone = "Port Authority",
+        areaID = 15454,
         items = {
             { id = 248758, currencies = { { id = 2815, amount = 350 } } },
             { id = 255642, currencies = { { id = 2815, amount = 250 } } },
@@ -1914,8 +1914,8 @@ ns.Vendors = {
     [231407] = {
         name = "Shredz the Scrapper",
         zone = "Undermine",
-        subzone = "The Heaps",
-        areaID = 15351,
+        subzone = "Venture Plaza",
+        areaID = 15455,
         items = {
             { id = 245311, currencies = { { id = 2815, amount = 250 } } },
             { id = 255647, currencies = { { id = 2815, amount = 300 } } },
@@ -1924,8 +1924,8 @@ ns.Vendors = {
     [231408] = {
         name = "Lab Assistant Laszly",
         zone = "Undermine",
-        subzone = "The Vatworks",
-        areaID = 15350,
+        subzone = "Steamwheedle Laboratories",
+        areaID = 15456,
         items = {
             { id = 245321, currencies = { { id = 2815, amount = 250 } } },
             { id = 255641, currencies = { { id = 2815, amount = 250 } } },
@@ -1973,8 +1973,8 @@ ns.Vendors = {
     [235621] = {
         name = "Ando the Gat",
         zone = "Liberation of Undermine",
-        subzone = "Incontinental Hotel",
-        areaID = 15388,
+        subzone = "The Incontinental Hotel",
+        areaID = 15646,
         items = {
             { id = 239213, price = 10000000 },
             { id = 245302, price = 77770000 },
@@ -2417,8 +2417,8 @@ ns.Vendors = {
     [252520] = {
         name = "Ripley Kiefer",
         zone = "Darkshore",
-        subzone = "Teldrassil",
-        areaID = 141,
+        subzone = "Rut'theran Village",
+        areaID = 702,
         faction = "Alliance",
         items = {
             { id = 245518, price = 1500000 },
@@ -3843,7 +3843,8 @@ ns.Vendors = {
     [256946] = {
         name = "Duskcaller Erthix",
         zone = "Talador",
-        subzone = "Refuge",
+        subzone = "Terokkar Refuge",
+        areaID = 6933,
         items = {
             { id = 258742, price = 3000000, currencies = { { id = 823, amount = 300 } } },
         },
@@ -4133,7 +4134,8 @@ ns.Vendors = {
     [261231] = {
         name = "Tuuran",
         zone = "Stormwind",
-        subzone = "Near Trading Post",
+        subzone = "Lion's Rest",
+        areaID = 8411,
         faction = "Alliance",
         items = {
             { id = 260785, price = 15000000 },
@@ -4158,7 +4160,8 @@ ns.Vendors = {
     [261262] = {
         name = "Gabbi",
         zone = "Orgrimmar",
-        subzone = "Near Trading Post",
+        subzone = "Valley of Strength",
+        areaID = 5170,
         faction = "Horde",
         items = {
             { id = 260785, price = 15000000 },

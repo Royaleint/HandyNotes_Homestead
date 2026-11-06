@@ -1351,6 +1351,8 @@ ns.Vendors = {
     [127120] = {
         name = "Vindicator Jaelaana",
         zone = "The Vindicaar",
+        subzone = "The Vindicaar",
+        areaID = 8714,
         items = {
             { id = 282111, price = 10000000, currencies = { { id = 1220, amount = 500 } } },
             { id = 282122, price = 10000000, currencies = { { id = 1220, amount = 500 } } },
@@ -1375,6 +1377,8 @@ ns.Vendors = {
     [127518] = {
         name = "Adjutant Vortus",
         zone = "The Vindicaar",
+        subzone = "The Vindicaar",
+        areaID = 8714,
         items = {
             { id = 281682, price = 7000000, currencies = { { id = 1220, amount = 300 } } },
             { id = 282024, currencies = { { id = 1220, amount = 200 } } },

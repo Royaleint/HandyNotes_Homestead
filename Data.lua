@@ -181,8 +181,8 @@ ns.Nodes = {
         [57147191] = 112634,
         [60208486] = 109306,
     },
-    [646] = {
-        [97625593] = 93550,
+    [647] = {
+        [44503830] = 93550,
     },
     [650] = {
         [41621044] = 108537,
@@ -1035,7 +1035,7 @@ ns.Vendors = {
     },
     [93550] = {
         name = "Quartermaster Ozorg",
-        zone = "Broken Shore",
+        zone = "Acherus: The Ebon Hold",
         subzone = "The Heart of Acherus",
         areaID = 7679,
         items = {

@@ -670,15 +670,22 @@ local mapHideHookInstalled = false
 -- result is marked incomplete and never cached, so a later render can fill it in.
 -- Resolved strings are cached because the tooltip re-renders on every item load; uncached, large vendors go quadratic.
 -- item.costCache: nil = not computed yet, false = free, string = resolved cost.
+-- false is only ever a single legacy bundle with nothing to pay: an
+-- alternatives set or an unresolved cost never caches as free.
 -- Grey, matching the location and "Items unknown" lines.
 local OTHER_COST_TEXT = "|cFFB3B3B3" .. L["(other cost)"] .. "|r"
+local COST_UNVERIFIED_TEXT = "|cFFB3B3B3" .. L["Cost unverified"] .. "|r"
 
-local function FormatCost(item)
-    if item.costCache ~= nil then
-        if item.costCache == false then return nil, true end
-        return item.costCache, true
+-- Calls visitor(bundle) for the item's primary bundle, then each alternative.
+local function ForEachCostBundle(item, visitor)
+    visitor(item)
+    if item.alternatives then
+        for _, bundle in ipairs(item.alternatives) do visitor(bundle) end
     end
+end
 
+-- One payment bundle: (text or nil, part count, degraded).
+local function FormatBundle(item)
     local parts = {}
     -- Appended after the loops so the marker always lands last, even when an early lookup fails.
     local needsOtherCost = false
@@ -727,7 +734,43 @@ local function FormatCost(item)
         parts[#parts + 1] = OTHER_COST_TEXT
     end
 
-    local cost = (#parts > 0) and table.concat(parts, " + ") or nil
+    return (#parts > 0) and table.concat(parts, " + ") or nil, #parts, degraded
+end
+
+local function FormatCost(item)
+    if item.costCache ~= nil then
+        if item.costCache == false then return nil, true end
+        return item.costCache, true
+    end
+
+    -- A cost the shipped data marks unverified shows only that, whatever
+    -- payload it carries.
+    if item.costStatus == "unresolved" then
+        item.costCache = COST_UNVERIFIED_TEXT
+        return item.costCache, true
+    end
+
+    local cost, partCount, degraded = FormatBundle(item)
+    if item.alternatives and #item.alternatives > 0 then
+        -- Components inside a bundle are paid together; bundles are
+        -- alternatives. An option with nothing to show cannot be told
+        -- apart from free, so the whole cost shows as unverified.
+        local options = { cost and (partCount > 1 and "(" .. cost .. ")" or cost) or false }
+        for _, bundle in ipairs(item.alternatives) do
+            local text, count, bundleDegraded = FormatBundle(bundle)
+            degraded = degraded or bundleDegraded
+            options[#options + 1] = text and (count > 1 and "(" .. text .. ")" or text) or false
+        end
+        cost = nil
+        for _, option in ipairs(options) do
+            if not option then cost = COST_UNVERIFIED_TEXT end
+        end
+        cost = cost or table.concat(options, " " .. L["or"] .. " ")
+    end
+    if cost and item.costStatus == "qualified" and cost ~= COST_UNVERIFIED_TEXT then
+        cost = cost .. " |cFFB3B3B3" .. L["(requirements unverified)"] .. "|r"
+    end
+
     if degraded then
         -- Don't memoize: complete == false keeps the hover pending so it re-renders once the data loads.
         return cost, false
@@ -741,26 +784,35 @@ local function ItemMatchesTooltipSearch(item, itemName)
     if itemName and itemName:lower():find(tooltipSearchQuery, 1, true) then
         return true
     end
-    if item.currencies then
-        for _, currency in ipairs(item.currencies) do
-            local info = C_CurrencyInfo.GetCurrencyInfo(currency.id)
-            if info and info.name and info.name:lower():find(tooltipSearchQuery, 1, true) then
-                return true
+    -- Every payment option is searchable; an unverified cost shows no
+    -- components, so none of them are searched either.
+    if item.costStatus == "unresolved" then return false end
+    local matched = false
+    ForEachCostBundle(item, function(bundle)
+        if matched then return end
+        if bundle.currencies then
+            for _, currency in ipairs(bundle.currencies) do
+                local info = C_CurrencyInfo.GetCurrencyInfo(currency.id)
+                if info and info.name and info.name:lower():find(tooltipSearchQuery, 1, true) then
+                    matched = true
+                    return
+                end
             end
         end
-    end
-    if item.items then
-        for _, itemCost in ipairs(item.items) do
-            -- GetItemNameByID, not GetItemInfo, so the search never triggers
-            -- item loads; it returns nil when uncached and the row simply
-            -- doesn't match on reagent name yet.
-            local name = C_Item.GetItemNameByID(itemCost.id)
-            if name and name:lower():find(tooltipSearchQuery, 1, true) then
-                return true
+        if bundle.items then
+            for _, itemCost in ipairs(bundle.items) do
+                -- GetItemNameByID, not GetItemInfo, so the search never triggers
+                -- item loads; it returns nil when uncached and the row simply
+                -- doesn't match on reagent name yet.
+                local name = C_Item.GetItemNameByID(itemCost.id)
+                if name and name:lower():find(tooltipSearchQuery, 1, true) then
+                    matched = true
+                    return
+                end
             end
         end
-    end
-    return false
+    end)
+    return matched
 end
 
 -- vendor -> uiMapID of the pin being hovered; re-renders only receive the vendor.
@@ -1108,15 +1160,18 @@ local function RefreshVendorItems(token, render)
         if not C_Item.GetItemInfo(item.id) and C_Item.DoesItemExistByID(item.id) then
             RequestItemLoad(item.id, token, render)
         end
-        -- Reagent item-costs (item.items) need the same load request as the
-        -- ware itself, or FormatCost's degraded result never self-corrects.
-        if item.items then
-            for _, itemCost in ipairs(item.items) do
-                if not C_Item.GetItemIconByID(itemCost.id) and C_Item.DoesItemExistByID(itemCost.id) then
-                    RequestItemLoad(itemCost.id, token, render)
+        -- Reagent item-costs (item.items, in every payment option) need the
+        -- same load request as the ware itself, or FormatCost's degraded
+        -- result never self-corrects.
+        ForEachCostBundle(item, function(bundle)
+            if bundle.items then
+                for _, itemCost in ipairs(bundle.items) do
+                    if not C_Item.GetItemIconByID(itemCost.id) and C_Item.DoesItemExistByID(itemCost.id) then
+                        RequestItemLoad(itemCost.id, token, render)
+                    end
                 end
             end
-        end
+        end)
     end
 end
 

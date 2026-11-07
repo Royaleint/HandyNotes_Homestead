@@ -1,7 +1,7 @@
 --[[
     HandyNotes_Homestead - Data
     GENERATED from Homestead vendor data: do not hand-edit.
-    Source: Homestead v2.16.0
+    Source: Homestead working-tree
 ]]
 
 local _, ns = ...
@@ -2634,7 +2634,7 @@ ns.Vendors = {
         zone = "Razorwind Shores",
         faction = "Horde",
         items = {
-            { id = 262453, currencies = { { id = 3363, amount = 30 } } },
+            { id = 262453, currencies = { { id = 3363, amount = 30 } }, costStatus = "unresolved" },
             { id = 244347, items = { { id = 274481, amount = 100 } } },
             { id = 245991, items = { { id = 274481, amount = 100 } } },
             { id = 245993, items = { { id = 274481, amount = 100 } } },

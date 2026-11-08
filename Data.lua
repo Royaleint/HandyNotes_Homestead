@@ -2634,7 +2634,7 @@ ns.Vendors = {
         zone = "Razorwind Shores",
         faction = "Horde",
         items = {
-            { id = 262453, currencies = { { id = 3363, amount = 30 } } },
+            { id = 262453, currencies = { { id = 3363, amount = 30 } }, alternatives = { { price = 5000000 } }, costStatus = "qualified" },
             { id = 244347, items = { { id = 274481, amount = 100 } } },
             { id = 245991, items = { { id = 274481, amount = 100 } } },
             { id = 245993, items = { { id = 274481, amount = 100 } } },

@@ -1482,7 +1482,7 @@ local function runVendorCostRenderColdToWarm()
     local warmLine = findLine(plainTooltip, "Cold Ware")
     check(warmLine == "Cold Ware50 + 3 |T4242:0:0|t",
         "a resolved reagent must self-correct on the triggered re-render instead of staying frozen, got " .. tostring(warmLine))
-    check(ware.costCache == "50 + 3 |T4242:0:0|t",
+    check(type(ware.costCache) == "table" and #ware.costCache == 1 and ware.costCache[1] == "50 + 3 |T4242:0:0|t",
         "a fully resolved cost must now be memoized, got " .. tostring(ware.costCache))
 
     restore()

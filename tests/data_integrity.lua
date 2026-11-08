@@ -45,7 +45,10 @@ local ns = {}
 assert(loadfile(dataPath))("HandyNotes_Homestead", ns)
 
 local VENDOR_FIELDS = { name = true, zone = true, subzone = true, areaID = true, faction = true, factionByMap = true, items = true }
-local ITEM_FIELDS = { id = true, price = true, currencies = true, items = true, otherCost = true }
+local ITEM_FIELDS = { id = true, price = true, currencies = true, items = true, otherCost = true,
+    alternatives = true, costStatus = true }
+local COST_STATUSES = { unresolved = true, verified = true, qualified = true }
+local BUNDLE_FIELDS = { price = true, currencies = true, items = true, otherCost = true }
 local COST_ENTRY_FIELDS = { id = true, amount = true }
 
 local function checkCostList(vendorLabel, itemLabel, listName, list)
@@ -76,6 +79,38 @@ local function checkCostList(vendorLabel, itemLabel, listName, list)
                 if not COST_ENTRY_FIELDS[key] then
                     fail("%s item %s: %s[%d] has unknown key %s", vendorLabel, itemLabel, listName, index, tostring(key))
                 end
+            end
+        end
+    end
+end
+
+-- Alternative payment bundles: each is a table with the same cost fields as an item.
+local function checkAlternatives(vendorLabel, itemLabel, alternatives)
+    if alternatives == nil then return end
+    if type(alternatives) ~= "table" or #alternatives == 0 then
+        fail("%s item %s: alternatives is not a non-empty list", vendorLabel, itemLabel)
+        return
+    end
+    for index, bundle in ipairs(alternatives) do
+        local label = string.format("alternatives[%d]", index)
+        if type(bundle) ~= "table" then
+            fail("%s item %s: %s is not a table", vendorLabel, itemLabel, label)
+        else
+            for key in pairs(bundle) do
+                if not BUNDLE_FIELDS[key] then
+                    fail("%s item %s: %s has unknown key %s", vendorLabel, itemLabel, label, tostring(key))
+                end
+            end
+            if bundle.price ~= nil and not (type(bundle.price) == "number" and bundle.price >= 0
+                    and bundle.price == math.floor(bundle.price)) then
+                fail("%s item %s: %s.price is not a non-negative integer (%s)",
+                    vendorLabel, itemLabel, label, tostring(bundle.price))
+            end
+            checkCostList(vendorLabel, itemLabel, label .. ".currencies", bundle.currencies)
+            checkCostList(vendorLabel, itemLabel, label .. ".items", bundle.items)
+            if bundle.otherCost ~= nil and bundle.otherCost ~= true then
+                fail("%s item %s: %s.otherCost is present but not exactly true (%s)",
+                    vendorLabel, itemLabel, label, tostring(bundle.otherCost))
             end
         end
     end
@@ -232,6 +267,11 @@ local function checkVendors(tableName, vendors, fields, npcMaps, prefix, stats, 
 
                         checkCostList(vendorLabel, itemLabel, "currencies", item.currencies)
                         checkCostList(vendorLabel, itemLabel, "items", item.items)
+                        checkAlternatives(vendorLabel, itemLabel, item.alternatives)
+                        if item.costStatus ~= nil and not COST_STATUSES[item.costStatus] then
+                            fail("%s item %s: costStatus is not unresolved, verified or qualified (%s)",
+                                vendorLabel, itemLabel, tostring(item.costStatus))
+                        end
 
                         if item.otherCost ~= nil and item.otherCost ~= true then
                             fail("%s item %s: otherCost is present but not exactly true (%s)",

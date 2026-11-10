@@ -1,7 +1,7 @@
 --[[
     HandyNotes_Homestead - Data
     GENERATED from Homestead vendor data: do not hand-edit.
-    Source: Homestead v2.16.0
+    Source: Homestead v2.17.0
 ]]
 
 local _, ns = ...
@@ -301,8 +301,10 @@ ns.Nodes = {
         [47808200] = 188265,
         [61807380] = 191025,
     },
+    [2023] = {
+        [64204170] = 210608,
+    },
     [2025] = {
-        [51204320] = 210608,
         [52208080] = 209220,
         [61403140] = 209192,
     },

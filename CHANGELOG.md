@@ -14,6 +14,23 @@ ships an EMPTY changelog to CurseForge/Wago/GitHub on a green CI run.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-10
+
+### Added
+
+- Items you can buy more than one way now list each price in the vendor
+  tooltip, like the Hearthlight Armillary from The Last Architect.
+- The Last Architect has an Alliance pin in Founder's Point.
+
+### Changed
+
+- Vendor data updated from Homestead 2.17.0.
+- Celestine of the Harvest's pin is now at her usual spot in Ohn'ahran
+  Plains. She follows the Dreamsurge between Dragon Isles zones, so she may
+  be elsewhere, and the pin does not follow her.
+- Quartermaster Ozorg's pin is now in Acherus: The Ebon Hold.
+- Corrected the location names for a dozen vendors.
+
 ## [1.3.1] - 2026-11-03
 
 ### Added

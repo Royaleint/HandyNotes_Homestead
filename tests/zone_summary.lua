@@ -842,7 +842,7 @@ local function runSummaryCombatGuard()
     r[8]()
 end
 
--- HNH-33: summary badges are pooled, so repeat rebuilds must not create new frames and a reused badge must act on its new node.
+-- Summary badges are pooled, so repeat rebuilds must not create new frames and a reused badge must act on its new node.
 local function runSummaryBadgePool()
     local data = {
         Nodes = {

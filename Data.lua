@@ -1,7 +1,7 @@
 --[[
     HandyNotes_Homestead - Data
     GENERATED from Homestead vendor data: do not hand-edit.
-    Source: Homestead v2.17.0
+    Source: Homestead v2.18.0
 ]]
 
 local _, ns = ...
@@ -44,8 +44,8 @@ ns.Nodes = {
     [56] = {
         [6405760] = 3178,
     },
-    [62] = {
-        [33800830] = 252520,
+    [57] = {
+        [55208917] = 252520,
     },
     [70] = {
         [41907420] = 23995,
@@ -328,7 +328,7 @@ ns.Nodes = {
     },
     [2215] = {
         [28275616] = 240852,
-        [42535573] = 217642,
+        [42805583] = 217642,
     },
     [2239] = {
         [46507070] = 216286,
@@ -365,12 +365,12 @@ ns.Nodes = {
         [40207292] = 267870,
         [40777313] = 255319,
         [52375430] = 271366,
+        [53455853] = 255299,
         [53535660] = 254687,
         [53565849] = 255298,
         [53625448] = 267794,
         [53705755] = 255301,
         [53805740] = 253596,
-        [53805940] = 255299,
         [54075876] = 257257,
         [54125911] = 255278,
         [54135905] = 255297,
@@ -402,10 +402,17 @@ ns.Nodes = {
         [39337994] = 276365,
         [39478009] = 276366,
         [39508017] = 276363,
+        [43045599] = 243531,
         [43175542] = 256009,
+        [43475374] = 241453,
+        [43645147] = 241451,
         [44046277] = 252916,
         [44106276] = 252915,
+        [46675119] = 243555,
+        [47045166] = 243359,
         [47715052] = 255495,
+        [47925344] = 243350,
+        [48235431] = 243353,
         [48305130] = 256026,
         [50735616] = 251091,
         [51025638] = 256828,
@@ -413,6 +420,7 @@ ns.Nodes = {
         [52537888] = 242399,
         [52787791] = 242398,
         [55766595] = 258181,
+        [56446991] = 257914,
     },
     [2395] = {
         [43204749] = 259864,
@@ -461,6 +469,9 @@ ns.Nodes = {
         [41904980] = 252873,
     },
     [2576] = {
+        [55926038] = 258507,
+        [57003198] = 258480,
+        [59683255] = 258540,
         [62593441] = 255114,
     },
     [2599] = {
@@ -608,7 +619,6 @@ ns.Vendors = {
     [45417] = {
         name = "Fiona",
         zone = "Eastern Plaguelands",
-        subzone = "Caravan",
         items = {
             { id = 248796, price = 30000000 },
         },
@@ -663,7 +673,6 @@ ns.Vendors = {
     [50304] = {
         name = "Captain Donald Adams",
         zone = "Orgrimmar",
-        subzone = "Gates of Orgrimmar",
         faction = "Horde",
         items = {
             { id = 245504, price = 1500000 },
@@ -698,7 +707,6 @@ ns.Vendors = {
     [50483] = {
         name = "Brave Tuho",
         zone = "Thunder Bluff",
-        subzone = "Wind Rider Roost",
         faction = "Horde",
         items = {
             { id = 243335, price = 2000000 },
@@ -936,7 +944,6 @@ ns.Vendors = {
     [86776] = {
         name = "Ribchewer",
         zone = "Frostwall",
-        subzone = "Trading Post",
         faction = "Horde",
         items = {
             { id = 244321, currencies = { { id = 824, amount = 100 } } },
@@ -961,7 +968,6 @@ ns.Vendors = {
     [86779] = {
         name = "Krixel Pinchwhistle",
         zone = "Frostwall",
-        subzone = "Trading Post",
         faction = "Horde",
         items = {
             { id = 244321, currencies = { { id = 824, amount = 100 } } },
@@ -984,7 +990,6 @@ ns.Vendors = {
     [87200] = {
         name = "Krixel Pinchwhistle",
         zone = "Lunarfall",
-        subzone = "Trading Post",
         faction = "Alliance",
         items = {
             { id = 244321, currencies = { { id = 824, amount = 100 } } },
@@ -996,7 +1001,6 @@ ns.Vendors = {
     [87312] = {
         name = "Vora Strongarm",
         zone = "Frostwall",
-        subzone = "Tavern",
         faction = "Horde",
         items = {
             { id = 239162, price = 500000, currencies = { { id = 824, amount = 100 } } },
@@ -1039,7 +1043,7 @@ ns.Vendors = {
     [93550] = {
         name = "Quartermaster Ozorg",
         zone = "Acherus: The Ebon Hold",
-        subzone = "The Heart of Acherus",
+        subzone = "Acherus: The Ebon Hold",
         areaID = 7679,
         items = {
             { id = 250112, currencies = { { id = 1220, amount = 350 } } },
@@ -1132,7 +1136,8 @@ ns.Vendors = {
     [105986] = {
         name = "Kelsey Steelspark",
         zone = "Dalaran",
-        subzone = "Den of Thieves",
+        subzone = "The Hall of Shadows",
+        areaID = 8011,
         items = {
             { id = 250783, currencies = { { id = 1220, amount = 150 } } },
             { id = 250784, currencies = { { id = 1220, amount = 150 } } },
@@ -1175,7 +1180,8 @@ ns.Vendors = {
     [108017] = {
         name = "Torv Dubstomp",
         zone = "Highmountain",
-        subzone = "Thunder Totem Basement",
+        subzone = "Thunder Totem",
+        areaID = 7731,
         items = {
             { id = 245405, price = 3000000, currencies = { { id = 1220, amount = 200 } } },
             { id = 245409, price = 3000000, currencies = { { id = 1220, amount = 200 } } },
@@ -1336,7 +1342,6 @@ ns.Vendors = {
     [112716] = {
         name = "Rasil Fireborne",
         zone = "Dalaran",
-        subzone = "Photonic Playground",
         items = {
             { id = 246851, price = 150000000 },
             { id = 284264, price = 10000000, currencies = { { id = 1220, amount = 500 } } },
@@ -1480,7 +1485,7 @@ ns.Vendors = {
     [144129] = {
         name = "Plugger Spazzring",
         zone = "Searing Gorge",
-        subzone = "The Grim Guzzler, Blackrock Depths",
+        subzone = "Blackrock Depths",
         items = {
             { id = 245291, price = 25000000 },
         },
@@ -1709,7 +1714,8 @@ ns.Vendors = {
     [196637] = {
         name = "Tethalash",
         zone = "Valdrakken",
-        subzone = "Behind Obsidian Enclave",
+        subzone = "The Obsidian Enclave",
+        areaID = 14506,
         items = {
             { id = 249545, price = 2500000 },
             { id = 249547, price = 2500000 },
@@ -1748,9 +1754,8 @@ ns.Vendors = {
     [210608] = {
         name = "Celestine of the Harvest",
         zone = "Dragon Isles",
-        subzone = "Dreamsurge (Rotating)",
         items = {
-            { id = 255673, items = { { id = 207026, amount = 500 } } },
+            { id = 255673, items = { { id = 207026, amount = 250 } } },
         },
     },
     [211065] = {
@@ -1771,7 +1776,6 @@ ns.Vendors = {
     [216284] = {
         name = "Mythrin'dir",
         zone = "Bel'ameth",
-        subzone = "East",
         items = {
             { id = 246091, currencies = { { id = 2003, amount = 300 } } },
             { id = 248759, currencies = { { id = 2003, amount = 150 } } },
@@ -1780,7 +1784,7 @@ ns.Vendors = {
     [216285] = {
         name = "Ellandrieth",
         zone = "Bel'ameth",
-        subzone = "The Silver Feather Inn",
+        subzone = "The Silver Feather",
         areaID = 15135,
         items = {
             { id = 245625, currencies = { { id = 2003, amount = 250 } } },
@@ -1826,7 +1830,6 @@ ns.Vendors = {
     [218202] = {
         name = "Thripps",
         zone = "The City of Threads",
-        subzone = "Lower City Armaments",
         items = {
             { id = 246866, currencies = { { id = 3056, amount = 500 } } },
         },
@@ -1941,7 +1944,7 @@ ns.Vendors = {
     [231409] = {
         name = "Smaks Topskimmer",
         zone = "Undermine",
-        subzone = "Incontinental Hotel",
+        subzone = "The Incontinental Hotel",
         areaID = 15388,
         items = {
             { id = 243312, currencies = { { id = 2815, amount = 350 } } },
@@ -2079,6 +2082,20 @@ ns.Vendors = {
             { id = 245293, currencies = { { id = 2815, amount = 400 } } },
         },
     },
+    [241451] = {
+        name = "Eriden",
+        zone = "Silvermoon City",
+        items = {
+            { id = 263998, price = 50000 },
+        },
+    },
+    [241453] = {
+        name = "Yatheon",
+        zone = "Silvermoon City",
+        items = {
+            { id = 264001, price = 50000 },
+        },
+    },
     [241928] = {
         name = "Chel the Chip",
         zone = "Zul'Aman",
@@ -2167,10 +2184,44 @@ ns.Vendors = {
             { id = 250772, currencies = { { id = 3379, amount = 150 } } },
         },
     },
+    [243350] = {
+        name = "Lyna",
+        zone = "Silvermoon City",
+        items = {
+            { id = 264000, price = 50000 },
+        },
+    },
+    [243353] = {
+        name = "Deynna",
+        zone = "Silvermoon City",
+        items = {
+            { id = 264174, price = 50000 },
+        },
+    },
+    [243359] = {
+        name = "Melaris",
+        zone = "Silvermoon City",
+        items = {
+            { id = 263997, price = 50000 },
+        },
+    },
+    [243531] = {
+        name = "Zaralda",
+        zone = "Silvermoon City",
+        items = {
+            { id = 264006, price = 50000 },
+        },
+    },
+    [243555] = {
+        name = "Lelorian",
+        zone = "Silvermoon City",
+        items = {
+            { id = 264004, price = 50000 },
+        },
+    },
     [246721] = {
         name = "Janey Forrest",
         zone = "Boralus",
-        subzone = "Hull'n'Home",
         faction = "Alliance",
         items = {
             { id = 252390, currencies = { { id = 1560, amount = 200 } } },
@@ -2257,7 +2308,6 @@ ns.Vendors = {
     [249196] = {
         name = "Materialist Ophinell",
         zone = "Twilight Highlands",
-        subzone = "Twilight Ascension Camp",
         items = {
             { id = 245284, currencies = { { id = 3319, amount = 50 } } },
             { id = 245330, currencies = { { id = 3319, amount = 50 } } },
@@ -2298,7 +2348,7 @@ ns.Vendors = {
     [251911] = {
         name = "Stacks Topskimmer",
         zone = "Undermine",
-        subzone = "Incontinental Hotel",
+        subzone = "The Incontinental Hotel",
         areaID = 15388,
         items = {
             { id = 243312, currencies = { { id = 2815, amount = 350 } } },
@@ -2343,7 +2393,6 @@ ns.Vendors = {
     [252043] = {
         name = "Halenthos Brightstride",
         zone = "Dalaran",
-        subzone = "The Filthy Animal",
         faction = "Horde",
         items = {
             { id = 245411, price = 20000000 },
@@ -2451,7 +2500,7 @@ ns.Vendors = {
     },
     [252520] = {
         name = "Ripley Kiefer",
-        zone = "Darkshore",
+        zone = "Teldrassil",
         subzone = "Rut'theran Village",
         areaID = 702,
         faction = "Alliance",
@@ -2611,7 +2660,6 @@ ns.Vendors = {
     [253232] = {
         name = "Inge Brightview",
         zone = "Ironforge",
-        subzone = "The Library",
         faction = "Alliance",
         items = {
             { id = 246411, price = 7000000 },
@@ -2691,7 +2739,7 @@ ns.Vendors = {
     [254603] = {
         name = "Riica",
         zone = "Stormwind",
-        subzone = "Old Town (Champion's Hall)",
+        subzone = "Old Town",
         areaID = 5149,
         faction = "Alliance",
         items = {
@@ -3601,7 +3649,6 @@ ns.Vendors = {
     [255325] = {
         name = "\"High Tides\" Ren",
         zone = "Razorwind Shores",
-        subzone = "The Hull",
         faction = "Horde",
         items = {
             { id = 235633, price = 500000 },
@@ -3777,13 +3824,12 @@ ns.Vendors = {
         zone = "Silvermoon City",
         items = {
             { id = 264003, price = 50000 },
-            { id = 264004, price = 500000000 },
         },
     },
     [256071] = {
         name = "Solelo",
         zone = "Stormwind",
-        subzone = "The Mage Quarter",
+        subzone = "Mage Quarter",
         areaID = 5154,
         faction = "Alliance",
         items = {
@@ -3906,7 +3952,6 @@ ns.Vendors = {
     [257295] = {
         name = "\"Fen\" Rucket",
         zone = "Razorwind Shores",
-        subzone = "The Hull",
         faction = "Horde",
         items = {
             { id = 272997, currencies = { { id = 3363, amount = 50 } } },
@@ -4038,6 +4083,13 @@ ns.Vendors = {
             { id = 264655, currencies = { { id = 3377, amount = 3200 } } },
         },
     },
+    [257914] = {
+        name = "Quelis",
+        zone = "Silvermoon City",
+        items = {
+            { id = 263999, price = 50000 },
+        },
+    },
     [258181] = {
         name = "Construct Ali'a",
         zone = "Silvermoon City",
@@ -4101,6 +4153,27 @@ ns.Vendors = {
             { id = 247785, currencies = { { id = 3316, amount = 250 } } },
             { id = 264253, currencies = { { id = 3316, amount = 250 } } },
             { id = 264345, currencies = { { id = 3316, amount = 250 } } },
+        },
+    },
+    [258480] = {
+        name = "Amwa'ana",
+        zone = "The Den",
+        items = {
+            { id = 264005, price = 50000 },
+        },
+    },
+    [258507] = {
+        name = "Mowaia",
+        zone = "The Den",
+        items = {
+            { id = 264002, price = 50000 },
+        },
+    },
+    [258540] = {
+        name = "Hawli",
+        zone = "The Den",
+        items = {
+            { id = 264172, price = 50000 },
         },
     },
     [259864] = {
@@ -4889,7 +4962,6 @@ ns.TimedVendors = {
             { id = 274535, currencies = { { id = 3363, amount = 30 } } },
             { id = 274537, currencies = { { id = 3363, amount = 30 } } },
             { id = 274539, currencies = { { id = 3363, amount = 30 } } },
-            { id = 269029 },
         },
     },
     [263258] = {

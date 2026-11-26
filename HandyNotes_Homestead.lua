@@ -77,7 +77,29 @@ local HBD
 local continentNodes = {}
 local worldNodes = {}
 local summaryIconpath = FALLBACK_ICON
-local professionVendorRequirements = { [256026] = 182 } -- Irodalmin requires Herbalism.
+-- Midnight profession shop-sign vendors (npcID -> achievement ID). The pin stays hidden
+-- until any character on the account has earned that profession's achievement.
+local signVendorAchievements = {
+    [243359] = 42788, -- Melaris: Alchemizing at Midnight
+    [241451] = 42792, -- Eriden: Blacksmithing at Midnight
+    [257914] = 42795, -- Quelis: Cooking at Midnight
+    [243350] = 42787, -- Lyna: Enchanting at Midnight
+    [241453] = 42798, -- Yatheon: Engineering at Midnight
+    [258507] = 42797, -- Mowaia: Fishing at Midnight
+    [256026] = 42793, -- Irodalmin: Herbalism at Midnight
+    [243555] = 42796, -- Lelorian: Inscribing at Midnight
+    [258480] = 42789, -- Amwa'ana: Jewelcrafting at Midnight
+    [243531] = 42786, -- Zaralda: Leatherworking at Midnight
+    [258540] = 42791, -- Hawli: Mining at Midnight
+    [256009] = 42790, -- Rendron: Skinning at Midnight
+    [243353] = 42794, -- Deynna: Tailoring at Midnight
+}
+local signAchievementIDs = {}
+for _, achievementID in next, signVendorAchievements do
+    signAchievementIDs[achievementID] = true
+end
+local signVendorLocked = {} -- npcID -> last verdict read
+local signVerdictVersion = 0 -- bumped whenever a verdict changes
 local professionVisibilityKey
 
 -- Holiday and endeavor vendors show only while their holiday or endeavor is running.
@@ -124,30 +146,40 @@ local function DisplayContinent(continentMapID)
     return continentMergesInto[continentMapID] or continentOverlaysOnParent[continentMapID] or continentMapID
 end
 
-local function PlayerHasSkillLine(skillLineID)
-    if not GetProfessions or not GetProfessionInfo then return false end
-    local profession1, profession2, profession3, profession4, profession5 = GetProfessions()
-    local professionIndices = { profession1, profession2, profession3, profession4, profession5 }
-    for index = 1, 5 do
-        local professionIndex = professionIndices[index]
-        if professionIndex then
-            local _, _, _, _, _, _, currentSkillLineID = GetProfessionInfo(professionIndex)
-            if currentSkillLineID == skillLineID then return true end
-        end
-    end
-    return false
+-- True only when the achievement is known to be unearned. A missing API or an unknown
+-- answer keeps the pin. GetAchievementInfo's completed flag is account-wide.
+local function ReadSignVendorLocked(npcID)
+    local achievementID = signVendorAchievements[npcID]
+    if not achievementID or not GetAchievementInfo then return false end
+    local _, _, _, completed = GetAchievementInfo(achievementID)
+    return completed == false
 end
 
 function HNH:IsProfessionVendorVisible(npcID)
-    local requiredSkillLineID = professionVendorRequirements[npcID]
-    return not requiredSkillLineID or PlayerHasSkillLine(requiredSkillLineID)
+    if not signVendorAchievements[npcID] then return true end
+    local locked = signVendorLocked[npcID]
+    if locked == nil then
+        locked = ReadSignVendorLocked(npcID)
+        signVendorLocked[npcID] = locked
+    end
+    return not locked
+end
+
+-- Rereads every sign vendor's verdict; true when any changed.
+local function RefreshSignVendorVerdicts()
+    local changed = false
+    for npcID in next, signVendorAchievements do
+        local locked = ReadSignVendorLocked(npcID)
+        if locked ~= (signVendorLocked[npcID] or false) then changed = true end
+        signVendorLocked[npcID] = locked
+    end
+    if changed then signVerdictVersion = signVerdictVersion + 1 end
+    return changed
 end
 
 local function RefreshProfessionVisibilityCache()
-    -- Cache key tracks only Herbalism (182); extend it if professionVendorRequirements gains another skill line.
-    local nextKey = PlayerHasSkillLine(182) and "herbalism" or "no_herbalism"
-    if nextKey == professionVisibilityKey and timedVisibilityKey == appliedTimedVisibilityKey then return end
-    professionVisibilityKey = nextKey
+    if signVerdictVersion == professionVisibilityKey and timedVisibilityKey == appliedTimedVisibilityKey then return end
+    professionVisibilityKey = signVerdictVersion
     appliedTimedVisibilityKey = timedVisibilityKey
     continentNodes = {}
     worldNodes = {}
@@ -1632,8 +1664,15 @@ local function RequestAndRefreshEndeavor()
     RefreshEndeavor()
 end
 
-local function OnTimedVendorEvent(_, event)
-    if event == "NEIGHBORHOOD_INITIATIVE_UPDATED" then
+local function OnTimedVendorEvent(_, event, achievementID)
+    if event == "ACHIEVEMENT_EARNED" then
+        if type(achievementID) ~= "number" or signAchievementIDs[achievementID] then
+            if RefreshSignVendorVerdicts() then RedrawTimedVendors() end
+        end
+    elseif event == "RECEIVED_ACHIEVEMENT_LIST" then
+        -- Account achievement data can arrive after the first read.
+        if RefreshSignVendorVerdicts() then RedrawTimedVendors() end
+    elseif event == "NEIGHBORHOOD_INITIATIVE_UPDATED" then
         -- This event is the answer to a request. Requesting again here would loop, so only read.
         if EndeavorTrackingOn() then RefreshEndeavor() end
     elseif event == "CALENDAR_UPDATE_EVENT_LIST" then
@@ -1663,6 +1702,8 @@ local function StartTimedVendorTracking(eventFrame)
     eventFrame:RegisterEvent("CALENDAR_UPDATE_EVENT_LIST")
     eventFrame:RegisterEvent("NEIGHBORHOOD_INITIATIVE_UPDATED")
     eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    eventFrame:RegisterEvent("ACHIEVEMENT_EARNED")
+    eventFrame:RegisterEvent("RECEIVED_ACHIEVEMENT_LIST")
     BuildTimedVendorLookups()
     if EndeavorTrackingOn() then
         RequestEndeavor()

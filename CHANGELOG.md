@@ -14,6 +14,29 @@ ships an EMPTY changelog to CurseForge/Wago/GitHub on a green CI run.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-26
+
+### Added
+
+- Pins for eleven more Midnight profession shop-sign vendors in Silvermoon
+  City and The Den.
+
+### Changed
+
+- The thirteen profession shop-sign vendors now appear only once your
+  account has earned that profession's Midnight achievement, the same as in
+  Homestead. Pins that showed before may be hidden until you have it.
+- Vendor data updated from Homestead 2.19.0.
+- Dennia Silvertongue, Tuuran, Gabbi and the Hara'ti Representative list
+  more decor.
+- Corrected two of Caspian's prices, and Taifa's Beguiling Memories of the
+  Sea now shows its price.
+- Corrected pins and location names for several vendors.
+
+### Removed
+
+- Pins for Materialist Ophinell and Valadar Starsong.
+
 ## [1.4.0] - 2026-11-10
 
 ### Added

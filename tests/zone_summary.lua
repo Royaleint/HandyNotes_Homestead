@@ -27,7 +27,7 @@ local function restoreAll()
     end
 end
 
-local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider, hbdTranslation, professionSkillLineID, itemNames, currencyNames, itemIcons, pins, poiMocks)
+local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, runtimeFixture, rectangleProvider, hbdTranslation, signAchievementEarned, itemNames, currencyNames, itemIcons, pins, poiMocks)
     local registered
     local registeredOptions
     local frame
@@ -110,7 +110,7 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     local globalNames = {
         "Enum", "next", "pairs", "C_Map", "C_Texture", "C_AddOns", "UnitFactionGroup", "CreateFrame",
         "GameTooltip", "UIParent", "WorldMapFrame", "UiMapPoint", "C_SuperTrack", "C_CurrencyInfo",
-        "C_Item", "Item", "C_Timer", "HandyNotes", "LibStub", "GetProfessions", "GetProfessionInfo",
+        "C_Item", "Item", "C_Timer", "HandyNotes", "LibStub", "GetAchievementInfo",
         "hooksecurefunc", "C_AreaPoiInfo", "CreateFromMixins", "MapCanvasDataProviderMixin",
         "InCombatLockdown", "UIErrorsFrame", "ERR_NOT_IN_COMBAT",
         "C_Calendar", "C_DateAndTime", "C_NeighborhoodInitiative", "CalendarFrame", "issecretvalue",
@@ -180,12 +180,8 @@ local function loadRuntime(addons, faction, summaryAtlasAvailable, runtimeData, 
     }
     _G.C_AddOns = { IsAddOnLoaded = function(name) return false, addons[name] end }
     _G.UnitFactionGroup = function() return factionState.value end
-    _G.GetProfessions = function()
-        if professionSkillLineID then return 1, nil, nil, nil, nil end
-    end
-    _G.GetProfessionInfo = function()
-        if professionSkillLineID then return "Test profession", nil, 1, 100, nil, nil, professionSkillLineID end
-    end
+    -- Only the sign achievements are read; the flag is the account-wide completed answer.
+    _G.GetAchievementInfo = function(id) return id, "Achievement", 10, signAchievementEarned == true end
     _G.CreateFrame = function(frameType, name, parent, template)
         frame = { frameType = frameType, name = name, parent = parent, template = template, scripts = {}, lines = {}, fontStrings = {} }
         createdFrames[#createdFrames + 1] = frame
@@ -2257,9 +2253,9 @@ local function run()
     local strata, frameLevel = handler:GetSummaryFrameLayering()
     check(strata == "MEDIUM" and frameLevel == 2024, "summary badge must render above Blizzard Area POIs")
     check(handler:GetMinimapPinScale() == 1.15, "minimap vendor pins must use the enlarged scale")
-    check(not handler:IsProfessionVendorVisible(256026), "Irodalmin must be hidden without Herbalism")
-    local herbalismRuntime = { loadRuntime({}, "Alliance", nil, nil, nil, nil, nil, 182) }
-    check(herbalismRuntime[1]:IsProfessionVendorVisible(256026), "Irodalmin must be visible with Herbalism")
+    check(not handler:IsProfessionVendorVisible(256026), "Irodalmin must be hidden until the account earns Herbalism at Midnight")
+    local herbalismRuntime = { loadRuntime({}, "Alliance", nil, nil, nil, nil, nil, true) }
+    check(herbalismRuntime[1]:IsProfessionVendorVisible(256026), "Irodalmin must be visible once the account earns Herbalism at Midnight")
     herbalismRuntime[8]()
     check(forcedZoneOrder[1] == 102 and forcedZoneOrder[2] == 101, "collision fixture must enumerate zones out of sorted order")
     local zoneNodes = collect(handler, 101, false)

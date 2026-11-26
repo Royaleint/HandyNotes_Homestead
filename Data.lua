@@ -1,7 +1,7 @@
 --[[
     HandyNotes_Homestead - Data
     GENERATED from Homestead vendor data: do not hand-edit.
-    Source: Homestead v2.18.0
+    Source: Homestead v2.19.0
 ]]
 
 local _, ns = ...
@@ -99,7 +99,6 @@ ns.Nodes = {
     [241] = {
         [48603060] = 49386,
         [49702960] = 253227,
-        [49808130] = 249196,
     },
     [371] = {
         [56604440] = 58414,
@@ -178,7 +177,7 @@ ns.Nodes = {
         [42095938] = 252498,
         [54307241] = 253387,
         [54647329] = 106901,
-        [57147191] = 112634,
+        [57397287] = 112634,
         [60208486] = 109306,
     },
     [647] = {
@@ -193,7 +192,7 @@ ns.Nodes = {
     [680] = {
         [15115333] = 256826,
         [26193233] = 253434,
-        [37004680] = 97140,
+        [36564689] = 97140,
         [40326973] = 93971,
         [45586915] = 255101,
         [49606280] = 252969,
@@ -2305,15 +2304,6 @@ ns.Vendors = {
             { id = 278701, items = { { id = 274481, amount = 100 } } },
         },
     },
-    [249196] = {
-        name = "Materialist Ophinell",
-        zone = "Twilight Highlands",
-        items = {
-            { id = 245284, currencies = { { id = 3319, amount = 50 } } },
-            { id = 245330, currencies = { { id = 3319, amount = 50 } } },
-            { id = 251997, currencies = { { id = 3319, amount = 75 } } },
-        },
-    },
     [250982] = {
         name = "Dethelin",
         zone = "Silvermoon City",
@@ -2426,11 +2416,11 @@ ns.Vendors = {
         faction = "Alliance",
         items = {
             { id = 245984, currencies = { { id = 1560, amount = 200 } } },
-            { id = 252394, currencies = { { id = 1560, amount = 550 } } },
+            { id = 252394, currencies = { { id = 1560, amount = 200 } } },
             { id = 252395, currencies = { { id = 1560, amount = 200 } } },
             { id = 252396, currencies = { { id = 1560, amount = 125 } } },
             { id = 252398, currencies = { { id = 1560, amount = 150 } } },
-            { id = 252652, currencies = { { id = 1560, amount = 150 } } },
+            { id = 252652, currencies = { { id = 1560, amount = 250 } } },
             { id = 252655, currencies = { { id = 1560, amount = 150 } } },
         },
     },
@@ -3916,9 +3906,15 @@ ns.Vendors = {
             { id = 259069, price = 2500000 },
             { id = 259070, price = 2500000 },
             { id = 260785, price = 15000000 },
+            { id = 268337, price = 50000000 },
+            { id = 268338, price = 5000000 },
+            { id = 268339, price = 20000000 },
+            { id = 268340, price = 50000000 },
+            { id = 268722, price = 5000000 },
             { id = 274731, price = 50000000 },
             { id = 274734, price = 50000000 },
             { id = 274736, price = 50000000 },
+            { id = 281107, price = 5000000 },
         },
     },
     [256946] = {
@@ -4263,6 +4259,15 @@ ns.Vendors = {
             { id = 259068, price = 2500000 },
             { id = 259069, price = 2500000 },
             { id = 259070, price = 2500000 },
+            { id = 268337, price = 50000000 },
+            { id = 268338, price = 5000000 },
+            { id = 268339, price = 20000000 },
+            { id = 268340, price = 50000000 },
+            { id = 268722, price = 5000000 },
+            { id = 274731, price = 50000000 },
+            { id = 274734, price = 50000000 },
+            { id = 274736, price = 50000000 },
+            { id = 281107, price = 5000000 },
         },
     },
     [261262] = {
@@ -4289,6 +4294,15 @@ ns.Vendors = {
             { id = 259068, price = 2500000 },
             { id = 259069, price = 2500000 },
             { id = 259070, price = 2500000 },
+            { id = 268337, price = 50000000 },
+            { id = 268338, price = 5000000 },
+            { id = 268339, price = 20000000 },
+            { id = 268340, price = 50000000 },
+            { id = 268722, price = 5000000 },
+            { id = 274731, price = 50000000 },
+            { id = 274734, price = 50000000 },
+            { id = 274736, price = 50000000 },
+            { id = 281107, price = 5000000 },
         },
     },
     [264056] = {
@@ -4643,6 +4657,9 @@ ns.Vendors = {
             { id = 246959, currencies = { { id = 3316, amount = 150 } } },
             { id = 249768, currencies = { { id = 3316, amount = 250 } } },
             { id = 251980, currencies = { { id = 3316, amount = 150 } } },
+            { id = 263039, currencies = { { id = 3316, amount = 250 } } },
+            { id = 263194, currencies = { { id = 3316, amount = 250 } } },
+            { id = 263195, currencies = { { id = 3316, amount = 250 } } },
         },
     },
     [276363] = {
@@ -4738,9 +4755,6 @@ ns.TimedNodes = {
     [37] = {
         [31975029] = 273403,
     },
-    [80] = {
-        [53403530] = 15864,
-    },
     [2351] = {
         [39087409] = 257168,
         [52415441] = 273470,
@@ -4774,28 +4788,6 @@ ns.TimedNodes = {
 }
 
 ns.TimedVendors = {
-    [15864] = {
-        name = "Valadar Starsong",
-        zone = "Moonglade",
-        kind = "event",
-        event = "Lunar Festival",
-        holidayIDs = { 327 },
-        items = {
-            { id = 253244 },
-            { id = 253254 },
-            { id = 253255 },
-            { id = 253256 },
-            { id = 253257 },
-            { id = 253290 },
-            { id = 253291 },
-            { id = 253292 },
-            { id = 253293 },
-            { id = 253294 },
-            { id = 253295 },
-            { id = 253296 },
-            { id = 253297 },
-        },
-    },
     [248525] = {
         name = "Pascal-K1N6",
         zone = "Razorwind Shores",
@@ -5019,7 +5011,7 @@ ns.TimedVendors = {
             { id = 280242, currencies = { { id = 3363, amount = 15 } } },
             { id = 280244, currencies = { { id = 3363, amount = 5 } } },
             { id = 280873, currencies = { { id = 3363, amount = 5 } } },
-            { id = 280846 },
+            { id = 280846, currencies = { { id = 3363, amount = 30 } } },
         },
     },
     [271173] = {

@@ -59,12 +59,17 @@ local function boot(opts)
     _G.C_CurrencyInfo = {}
     _G.C_Item = {}
     _G.Item = { CreateFromItemID = function() return { ContinueOnItemLoad = function() end } end }
+    -- Map 12 is a continent whose child zone is map 18.
     _G.C_Map = {
-        GetMapInfo = function(mapID) return { mapID = mapID, mapType = 3, name = "Map " .. mapID } end,
+        GetMapInfo = function(mapID)
+            if mapID == 12 then return { mapID = 12, mapType = 2, parentMapID = 0, name = "Continent" } end
+            return { mapID = mapID, mapType = 3, parentMapID = 12, name = "Map " .. mapID }
+        end,
+        GetMapRectOnMap = function() return 0.2, 0.6, 0.2, 0.6 end,
     }
     _G.Enum = { UIMapType = { World = 1, Continent = 2 } }
     _G.UnitFactionGroup = function() return "Alliance" end
-    _G.InCombatLockdown = function() return false end
+    _G.InCombatLockdown = function() return ctx.inCombat == true end
     _G.HandyNotes = {
         getXY = function(_, coord) return coord, coord end,
         RegisterPluginDB = function(_, _, handler) ctx.handler = handler end,
@@ -130,6 +135,17 @@ local function boot(opts)
             found[nodes[coord]] = true
         end
     end
+    -- Vendors the continent view counts across its zone summaries.
+    function ctx.continentCount()
+        local iter, nodes, state = ctx.handler:GetNodes2(12, false)
+        local total = 0
+        local coord = state
+        while true do
+            coord = iter(nodes, coord)
+            if not coord then return total end
+            total = total + (nodes[coord].vendorCount or 0)
+        end
+    end
     return ctx
 end
 
@@ -189,6 +205,35 @@ do
     ctx.fire("RECEIVED_ACHIEVEMENT_LIST")
     check(ctx.notify == ctx.loginNotify + 2, "account achievement data arriving redraws when a verdict changed")
     check(ctx.shown()[other[1]], "an account-wide earn shows the pin after the list arrives")
+end
+
+-- The continent view's cached counts follow a verdict change in both directions.
+do
+    local ctx = boot()
+    local target = SIGN_VENDORS[7]
+    local before = ctx.continentCount()
+    check(before == 1, "continent view counts only the ordinary vendor while every sign is locked")
+    ctx.earned[target[2]] = { completed = true, earnedByMe = false }
+    ctx.fire("ACHIEVEMENT_EARNED", target[2], false)
+    check(ctx.continentCount() == before + 1, "an earned sign achievement adds its vendor to the continent count")
+    ctx.earned[target[2]] = nil
+    ctx.fire("RECEIVED_ACHIEVEMENT_LIST")
+    check(ctx.continentCount() == before, "a refreshed account list that un-earns it takes the vendor back out")
+end
+
+-- An achievement earned in combat sends no redraw until combat ends, then exactly one.
+do
+    local ctx = boot()
+    local target = SIGN_VENDORS[7]
+    ctx.inCombat = true
+    ctx.earned[target[2]] = { completed = true, earnedByMe = true }
+    ctx.fire("ACHIEVEMENT_EARNED", target[2], false)
+    check(ctx.notify == ctx.loginNotify, "no redraw is sent during combat")
+    ctx.inCombat = false
+    ctx.fire("PLAYER_REGEN_ENABLED")
+    check(ctx.notify == ctx.loginNotify + 1, "combat ending sends the deferred redraw once")
+    ctx.fire("PLAYER_REGEN_ENABLED")
+    check(ctx.notify == ctx.loginNotify + 1, "the deferred redraw is not sent twice")
 end
 
 print("PASS: profession sign vendors follow the account's achievements")
